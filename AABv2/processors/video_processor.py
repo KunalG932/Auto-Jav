@@ -66,6 +66,14 @@ async def process_video_download(
             pass
 
     info = await loop.run_in_executor(None, download_torrent, magnet, _progress_cb)
+    
+    LOG.info(f"Download executor returned: info={info}")
+    if info:
+        LOG.info(f"Info type: {type(info)}, keys: {info.keys() if isinstance(info, dict) else 'N/A'}")
+        file_path = info.get('file') if isinstance(info, dict) else None
+        LOG.info(f"File path: {file_path}")
+        if file_path:
+            LOG.info(f"File exists: {os.path.exists(file_path)}")
 
     if info and info.get('file') and os.path.exists(info['file']):
         LOG.info(f"✅ Download successful, starting post-processing for: {info['file']}")
