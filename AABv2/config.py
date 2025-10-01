@@ -1,0 +1,55 @@
+import os
+from dotenv import load_dotenv
+from dataclasses import dataclass
+from typing import List
+
+load_dotenv()
+
+
+def _get_list(var: str, default: str = "") -> List[int]:
+    raw = os.getenv(var, default)
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    out: List[int] = []
+    for p in parts:
+        try:
+            out.append(int(p))
+        except ValueError:
+            pass
+    return out
+
+
+@dataclass(frozen=True)
+class Settings:
+    author: str = os.getenv("AUTHOR", "Unknown")
+    licensed_under: str = os.getenv("LICENSED_UNDER", "Unknown")
+
+    owner_ids: tuple[int, ...] = tuple(_get_list("OWNER_IDS"))  # tuple for hashability
+
+    mongo_uri: str = os.getenv("MONGO_URI", "")
+
+    main_channel: str = os.getenv("MAIN_CHANNEL", "")
+    thumbnail_path: str = os.getenv("THUMBNAIL_PATH", "AAB/utils/thumb.jpeg")
+    files_channel: int = int(os.getenv("FILES_CHANNEL", "0"))
+    production_chat: int = int(os.getenv("PRODUCTION_CHAT", "0"))
+
+    api_id: int = int(os.getenv("API_ID", "0"))
+    api_hash: str = os.getenv("API_HASH", "")
+    main_bot_token: str = os.getenv("MAIN_BOT_TOKEN", "")
+    client_bot_token: str = os.getenv("CLIENT_BOT_TOKEN", "")
+
+    check_interval_sec: int = int(os.getenv("CHECK_INTERVAL_SEC", "300"))
+    api_endpoint: str = os.getenv("JAV_API_URL", "https://jav-api-w4od.onrender.com/api/latest?limit=10&sort_by_date=true&translate=true")
+    api_timeout_sec: int = int(os.getenv("JAV_API_TIMEOUT_SEC", "60"))
+    api_retries: int = int(os.getenv("JAV_API_RETRIES", "3"))
+    api_backoff_sec: int = int(os.getenv("JAV_API_BACKOFF_SEC", "20"))
+
+    # Torrent settings
+    torrent_metadata_timeout_sec: int = int(os.getenv("TORRENT_METADATA_TIMEOUT_SEC", "90"))
+    torrent_stall_timeout_sec: int = int(os.getenv("TORRENT_STALL_TIMEOUT_SEC", "300"))
+    download_update_interval_sec: int = int(os.getenv("DOWNLOAD_UPDATE_INTERVAL_SEC", "10"))
+
+    # Encoding settings
+    # Encoding settings removed (feature disabled)
+
+
+SETTINGS = Settings()
