@@ -48,8 +48,15 @@ class Settings:
     torrent_stall_timeout_sec: int = int(os.getenv("TORRENT_STALL_TIMEOUT_SEC", "300"))
     download_update_interval_sec: int = int(os.getenv("DOWNLOAD_UPDATE_INTERVAL_SEC", "10"))
 
-    # Encoding settings
-    # Encoding settings removed (feature disabled)
+    # Encoding settings (enabled for 720p quality)
+    enable_encoding: bool = os.getenv("ENABLE_ENCODING", "true").lower() == "true"
+    max_resolution_width: int = int(os.getenv("MAX_RESOLUTION_WIDTH", "1280"))  # 720p width
+    max_resolution_height: int = int(os.getenv("MAX_RESOLUTION_HEIGHT", "720"))  # 720p height
+    encode_crf: int = int(os.getenv("ENCODE_CRF", "23"))  # Quality (18-28 recommended)
+    encode_preset: str = os.getenv("ENCODE_PRESET", "medium")  # faster/fast/medium/slow/slower
+    encode_video_codec: str = os.getenv("ENCODE_VIDEO_CODEC", "libx264")  # libx264 or libx265
+    encode_audio_codec: str = os.getenv("ENCODE_AUDIO_CODEC", "aac")  # aac recommended
+    encode_audio_bitrate: str = os.getenv("ENCODE_AUDIO_BITRATE", "128k")  # Audio quality
 
 
 SETTINGS = Settings()

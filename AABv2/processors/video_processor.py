@@ -85,16 +85,41 @@ async def process_video_download(
         try:
             upload_path = await remux_if_needed(info['file'], safe_edit, title)
             
-            try:
-                await safe_edit(f"🔄 Encoding/Converting file: {os.path.basename(upload_path)}")
-            except Exception:
-                pass
-
-            LOG.info("Encoding disabled; proceeding with original file")
-            try:
-                await safe_edit("ℹ️ Encoding skipped: proceeding with original file")
-            except Exception:
-                pass
+            # Encode video to 720p if encoding is enabled
+            if SETTINGS.enable_encoding:
+                try:
+                    await safe_edit(f"🔄 Encoding to 720p: {os.path.basename(upload_path)}")
+                    LOG.info(f"Starting encoding for: {upload_path}")
+                    
+                    # Import encode function
+                    from ..services.encode import encode_file
+                    
+                    # Run encoding in executor to avoid blocking
+                    loop = asyncio.get_event_loop()
+                    encoded_path = await loop.run_in_executor(None, encode_file, upload_path, None)
+                    
+                    if encoded_path and os.path.exists(encoded_path):
+                        LOG.info(f"✅ Encoding successful: {encoded_path}")
+                        # Clean up original file if encoding succeeded
+                        try:
+                            if upload_path != info['file']:
+                                os.remove(upload_path)
+                        except Exception:
+                            pass
+                        upload_path = encoded_path
+                        await safe_edit(f"✅ Encoded to 720p: {os.path.basename(upload_path)}")
+                    else:
+                        LOG.warning("Encoding failed, using original file")
+                        await safe_edit("⚠️ Encoding failed, using original file")
+                except Exception as e:
+                    LOG.error(f"Encoding error: {e}", exc_info=True)
+                    await safe_edit("⚠️ Encoding failed, using original file")
+            else:
+                LOG.info("Encoding disabled; proceeding with original file")
+                try:
+                    await safe_edit("ℹ️ Encoding skipped: proceeding with original file")
+                except Exception:
+                    pass
 
             try:
                 up_size = os.path.getsize(upload_path) / (1024.0 * 1024.0)

@@ -8,17 +8,23 @@ Auto JAV Bot is a Telegram bot that automatically discovers and uploads JAV rele
 
 ## Features
 
-- Automatic discovery of new JAV items via API.
-- Magnet-based downloading and upload to a files channel.
-- Single "Download Now" deep-link button (no external Magnet/Torrent buttons).
-- Deep-link button to receive the uploaded file in DM.
-- Update channel receives either the message link of the posted video or "Notfile" when no file was uploaded.
+- **Automatic discovery** of new JAV items via API
+- **Magnet-based downloading** with torrent support
+- **Automatic video encoding** to 720p quality for optimal file size
+- **Smart file size management** - Files >2GB automatically split into parts
+- **Upload to Telegram** files channel with deep-link access
+- **Single "Download Now" button** - No external Magnet/Torrent links exposed
+- **Deep-link button** to receive uploaded files in DM
+- **Thumbnail support** - Automatically downloads and displays video thumbnails
+- **Retry mechanism** - API calls with exponential backoff for reliability
 
 ## Requirements
 
-- VPS or machine with Python 3.11.
-- MongoDB (for state and file index).
-- System libtorrent (python3-libtorrent) available.
+- **VPS or machine** with Python 3.11+
+- **MongoDB** for state management and file index
+- **FFmpeg** for video encoding and processing
+- **System libtorrent** (python3-libtorrent) for torrent downloads
+- **Sufficient disk space** for temporary video storage during processing
 
 ## Setup
 
@@ -36,9 +42,17 @@ Auto JAV Bot is a Telegram bot that automatically discovers and uploads JAV rele
    ```
 
 3. **Configure Bot:**
-   - Create your Telegram bots and obtain API credentials.
-   - Fill `AAB/config.json` with required values:
-     - `production_chat`, `files_channel`, `main_channel`, `owner`, `database_url`, `api_id`, `api_hash`, `main_bot`, `client_bot`, `thumbnail_url`.
+   - Create your Telegram bots and obtain API credentials
+   - Copy `.env.example` to `.env` and fill in your values:
+     - **Required:** `API_ID`, `API_HASH`, `MAIN_BOT_TOKEN`, `CLIENT_BOT_TOKEN`
+     - **Channels:** `MAIN_CHANNEL`, `FILES_CHANNEL`, `PRODUCTION_CHAT`
+     - **Database:** `MONGO_URI`
+     - **Encoding:** Configure video quality settings (see [ENCODING_SETUP.md](ENCODING_SETUP.md))
+   
+   ```bash
+   cp .env.example .env
+   # Edit .env with your values
+   ```
 
 4. **API Used:**
    - The bot fetches items from: `https://jav-api-w4od.onrender.com/api/latest?limit=10&sort_by_date=true&translate=true`.
@@ -76,7 +90,31 @@ Auto JAV Bot is a Telegram bot that automatically discovers and uploads JAV rele
    ```
 
 5. **Accessing Files:**
-   - Users can tap the "Get File" button in the channel post (deep-links to `/start <hash>`), and the bot forwards the file from the files channel.
+   - Users tap the "Get File" button in channel posts (deep-links to `/start <hash>`)
+   - Bot forwards the file from the files channel to the user's DM
+
+## Video Encoding (New Feature!)
+
+The bot now includes **automatic video encoding** to ensure all videos are optimized to **720p quality** with reduced file sizes.
+
+### Key Features:
+- ✅ Automatic downscaling to 720p (1280x720)
+- ✅ Maintains original aspect ratio
+- ✅ Configurable quality settings (CRF 18-28)
+- ✅ Typical file size reduction: 30-60%
+- ✅ Can be toggled on/off via environment variable
+
+### Quick Configuration:
+Add to your `.env` file:
+```env
+ENABLE_ENCODING=true
+MAX_RESOLUTION_WIDTH=1280
+ENCODE_CRF=23
+ENCODE_PRESET=medium
+ENCODE_VIDEO_CODEC=libx264
+```
+
+📖 **Full documentation:** See [ENCODING_SETUP.md](ENCODING_SETUP.md) for detailed configuration guide, performance metrics, and troubleshooting.
 
 ## AABv2 (Safe Rewrite)
 
@@ -109,8 +147,11 @@ docker run --env-file .env --name aabv2 --restart unless-stopped aabv2
 
 ## Notes
 
-- Ensure libtorrent is installed and accessible.
-- The bot no longer performs anime-specific auto-downloads or encoding; the workflow is focused on JAV items.
+- **FFmpeg is required** for video encoding - install via `apt install ffmpeg` (Linux) or download from ffmpeg.org
+- **Encoding can be disabled** by setting `ENABLE_ENCODING=false` in `.env`
+- **Large files (>2GB)** are automatically split into two parts for upload
+- **Disk space:** Ensure sufficient space for temporary video storage during encoding
+- The bot workflow is optimized for JAV content processing
 
 ## Contributors
 | ![**Dhruv-Tara**](https://github.com/Dhruv-Tara.png?size=50) | [**_Dhruv-Tara_**](https://github.com/Dhruv-Tara) |
