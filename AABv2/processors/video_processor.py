@@ -282,28 +282,8 @@ async def post_to_main_channel(
         bot_user = await forward_client.get_me()
         bot_username = getattr(bot_user, 'username', '') or ''
 
-        ai_caption = None
-        try:
-            payload = prepare_caption_content(item) if item else ''
-            loop = asyncio.get_event_loop()
-            try:
-                ai_caption = await asyncio.wait_for(
-                    loop.run_in_executor(None, fetch_and_format, payload, 8),
-                    timeout=12,
-                )
-            except Exception:
-                ai_caption = None
-        except Exception:
-            ai_caption = None
-
-        if ai_caption and isinstance(ai_caption, str):
-            try:
-                formatted = format_for_post(ai_caption)
-                post_caption = formatted if formatted else ai_caption
-            except Exception:
-                post_caption = ai_caption
-        else:
-            post_caption = caption
+        # Use original caption from API, no AI generation
+        post_caption = caption
 
         thumb_image = await generate_thumbnail(item)
 
@@ -352,7 +332,44 @@ async def post_to_main_channel(
         LOG.error(f"Failed to post to main channel: {e}")
 
 async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
-    return None
+    """Download thumbnail from API"""
+    thumbnail_url = item.get('thumbnail')
+    if not thumbnail_url:
+        LOG.warning("No thumbnail URL in item")
+        return None
+    
+    try:
+        import requests
+        import tempfile
+        
+        # Download thumbnail
+        response = requests.get(thumbnail_url, timeout=15)
+        response.raise_for_status()
+        
+        # Save to temp file
+        thumb_dir = "./thumbnails"
+        os.makedirs(thumb_dir, exist_ok=True)
+        
+        # Get file extension from URL or default to .jpg
+        ext = '.jpg'
+        if '.' in thumbnail_url:
+            url_ext = thumbnail_url.split('.')[-1].split('?')[0].lower()
+            if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
+                ext = f'.{url_ext}'
+        
+        # Use code as filename if available
+        code = item.get('code', 'thumb')
+        thumb_path = os.path.join(thumb_dir, f"{code}{ext}")
+        
+        with open(thumb_path, 'wb') as f:
+            f.write(response.content)
+        
+        LOG.info(f"Downloaded thumbnail: {thumb_path}")
+        return thumb_path
+        
+    except Exception as e:
+        LOG.error(f"Failed to download thumbnail from {thumbnail_url}: {e}")
+        return None
 
 async def cleanup_files(original_file: str, processed_file: str):
     try:

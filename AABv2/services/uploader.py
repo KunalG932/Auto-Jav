@@ -54,7 +54,7 @@ def prepare_caption_content(item: Dict[str, Any]) -> str:
 
 async def upload_file(file_client, file_path: str, title: Optional[str] = None,
                       item: Optional[Dict[str, Any]] = None,
-                      send_ai_caption: bool = True) -> Optional[Message]:
+                      send_ai_caption: bool = False) -> Optional[Message]:
     try:
         abs_path = os.path.abspath(file_path)
         if not os.path.exists(abs_path):
@@ -64,55 +64,60 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
         LOG.error(f"Error while resolving file path: {e}")
         return None
 
-    ai_caption: Optional[str] = None
-    formatted_ai: Optional[str] = None
-    if item and send_ai_caption:
-        try:
-            payload = prepare_caption_content(item)
-            loop = asyncio.get_running_loop()
-            try:
-                ai_caption = await asyncio.wait_for(
-                    loop.run_in_executor(None, fetch_and_format, payload, 8),
-                    timeout=10.0,
-                )
-            except asyncio.TimeoutError:
-                LOG.warning("AI caption generation timed out after 10s")
-                ai_caption = None
-
-            if ai_caption and isinstance(ai_caption, str):
-                LOG.info(f"AI caption generated (len={len(ai_caption)}): {ai_caption[:200]!r}")
-                try:
-                    formatted_ai = format_for_post(ai_caption)
-                except Exception:
-                    formatted_ai = ai_caption
-            else:
-                ai_caption = None
-        except Exception as e:
-            LOG.warning(f"AI caption generation failed: {e}")
-
+    # No AI caption, use original description from API
     if title:
         doc_caption = title
     else:
         doc_caption = build_caption(item) if item else os.path.basename(abs_path)
 
-    if formatted_ai:
-        doc_caption = f"{doc_caption}\n\n{formatted_ai}"
-
     if not title and not doc_caption:
         doc_caption = os.path.basename(abs_path)
 
+    # Download thumbnail from API if available
     thumb_path = None
-    try:
-        tp = getattr(SETTINGS, 'thumbnail_path', None)
-        if tp:
-            tp_abs = os.path.abspath(tp)
-            LOG.info(f"Looking for thumbnail at: {tp_abs}")
-            if os.path.exists(tp_abs):
-                thumb_path = tp_abs
-            else:
-                LOG.warning(f"Thumbnail path not found, skipping: {tp_abs}")
-    except Exception:
-        thumb_path = None
+    if item and item.get('thumbnail'):
+        try:
+            import requests
+            thumbnail_url = item.get('thumbnail')
+            if thumbnail_url and isinstance(thumbnail_url, str):
+                LOG.info(f"Downloading thumbnail from API: {thumbnail_url}")
+                
+                response = requests.get(thumbnail_url, timeout=15)
+                response.raise_for_status()
+                
+                thumb_dir = "./thumbnails"
+                os.makedirs(thumb_dir, exist_ok=True)
+                
+                ext = '.jpg'
+                if '.' in thumbnail_url:
+                    url_ext = thumbnail_url.split('.')[-1].split('?')[0].lower()
+                    if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
+                        ext = f'.{url_ext}'
+                
+                code = item.get('code', 'thumb')
+                thumb_path = os.path.join(thumb_dir, f"{code}_upload{ext}")
+                
+                with open(thumb_path, 'wb') as f:
+                    f.write(response.content)
+                
+                LOG.info(f"Thumbnail downloaded: {thumb_path}")
+        except Exception as e:
+            LOG.warning(f"Failed to download thumbnail from API: {e}")
+            thumb_path = None
+    
+    # Fallback to static thumbnail if API download failed
+    if not thumb_path:
+        try:
+            tp = getattr(SETTINGS, 'thumbnail_path', None)
+            if tp:
+                tp_abs = os.path.abspath(tp)
+                LOG.info(f"Using fallback thumbnail at: {tp_abs}")
+                if os.path.exists(tp_abs):
+                    thumb_path = tp_abs
+                else:
+                    LOG.warning(f"Fallback thumbnail not found: {tp_abs}")
+        except Exception:
+            thumb_path = None
 
     upload_path = abs_path
     LOG.info("Encoding/size-reduction disabled; proceeding to upload original file")
