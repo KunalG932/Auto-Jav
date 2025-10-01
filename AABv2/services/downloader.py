@@ -12,7 +12,8 @@ from ..utils import translate_to_english
 
 LOG = logging.getLogger("AABv2")
 
-SAVE_PATH = "./downloads"
+# Use absolute path for downloads to avoid path resolution issues
+SAVE_PATH = os.path.abspath("./downloads")
 
 
 def sanitize_filename(name: str, max_length: int = 200) -> str:
@@ -215,6 +216,36 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
         # Use the actual video file name, not the torrent metadata name
         safe_name = sanitize_filename(largest_file)
         full_path = os.path.join(SAVE_PATH, largest_file)
+
+        # Check if file exists at expected path
+        if not os.path.exists(full_path):
+            # File might be in a subdirectory, search for it
+            LOG.warning(f"File not found at expected path: {full_path}")
+            LOG.info(f"Searching for video file in: {SAVE_PATH}")
+            
+            # Search for the largest video file in the download directory
+            found_file = None
+            found_size = 0
+            video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
+            
+            for root, dirs, files in os.walk(SAVE_PATH):
+                for file in files:
+                    file_ext = os.path.splitext(file)[1].lower()
+                    if file_ext in video_extensions:
+                        file_path = os.path.join(root, file)
+                        file_size = os.path.getsize(file_path)
+                        if file_size > found_size:
+                            found_file = file_path
+                            found_size = file_size
+            
+            if found_file:
+                LOG.info(f"Found video file: {found_file} ({found_size / (1024*1024):.2f} MB)")
+                full_path = found_file
+                safe_name = os.path.basename(found_file)
+            else:
+                LOG.error(f"No video file found in {SAVE_PATH}")
+                ses.remove_torrent(handle)
+                return None
 
         # If the name on disk differs from sanitized, attempt to rename/move
         target_path = os.path.join(SAVE_PATH, safe_name)
