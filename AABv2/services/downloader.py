@@ -224,7 +224,10 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
                 })
             except Exception:
                 pass
-        return {"file": full_path, "name": torrent_name}
+        
+        result = {"file": full_path, "name": torrent_name}
+        LOG.info(f"Returning download result: {result}")
+        return result
 
     except Exception as e:
         LOG.exception(f"download_torrent error: {e}")
