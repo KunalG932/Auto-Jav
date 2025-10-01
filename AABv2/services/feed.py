@@ -16,16 +16,44 @@ def fetch_jav() -> Optional[List[Dict[str, Any]]]:
 
     for attempt in range(1, SETTINGS.api_retries + 1):
         try:
-            response = requests.get(SETTINGS.api_endpoint, timeout=SETTINGS.api_timeout_sec)
+            timeout = SETTINGS.api_timeout_sec + (attempt * 30)
+            LOG.info(f"Fetching from API (attempt {attempt}/{SETTINGS.api_retries}, timeout={timeout}s)...")
+            
+            response = requests.get(
+                SETTINGS.api_endpoint,
+                timeout=timeout,
+                headers={'User-Agent': 'Auto-JAV-Bot/2.0'}
+            )
             response.raise_for_status()
             data = response.json()
+            LOG.info(f"✅ API fetch successful on attempt {attempt}")
             break
+        except requests.exceptions.Timeout as e:
+            last_err = e
+            LOG.warning(f"⏱️ API timeout (try {attempt}/{SETTINGS.api_retries}): Service may be cold starting")
+            if attempt < SETTINGS.api_retries:
+                backoff = SETTINGS.api_backoff_sec * attempt
+                LOG.info(f"Retrying in {backoff}s with exponential backoff...")
+                time.sleep(backoff)
+            else:
+                LOG.error("❌ All retries exhausted - API unavailable")
+                return None
+        except requests.exceptions.RequestException as e:
+            last_err = e
+            LOG.error(f"API request error (try {attempt}/{SETTINGS.api_retries}): {e}")
+            if attempt < SETTINGS.api_retries:
+                backoff = SETTINGS.api_backoff_sec * attempt
+                LOG.info(f"Retrying in {backoff}s...")
+                time.sleep(backoff)
+            else:
+                LOG.exception("All retries failed")
+                return None
         except Exception as e:
             last_err = e
-            LOG.error(f"API fetch error (try {attempt}/{SETTINGS.api_retries}): {e}")
+            LOG.error(f"Unexpected error (try {attempt}/{SETTINGS.api_retries}): {e}")
             if attempt < SETTINGS.api_retries:
-                LOG.info(f"Retrying in {SETTINGS.api_backoff_sec}s...")
-                time.sleep(SETTINGS.api_backoff_sec)
+                backoff = SETTINGS.api_backoff_sec * attempt
+                time.sleep(backoff)
             else:
                 LOG.exception("All retries failed")
                 return None

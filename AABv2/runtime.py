@@ -11,6 +11,7 @@ from .db import client as mongo_client, is_working, set_working
 from .handlers import alive_command, logs_command, status_command, start_command
 from .handlers.commands import set_clients
 from .processors import process_item, check_for_new_items
+from .services.api_health import warm_up_api
 
 LOG = logging.getLogger("AABv2")
 logging.basicConfig(
@@ -114,6 +115,9 @@ async def main():
             LOG.info("✅ Downloads directory ready")
         except Exception as dir_error:
             LOG.warning(f"Failed to create downloads directory: {dir_error}")
+
+        LOG.info("🔥 Warming up API (checking if service is available)...")
+        warm_up_api(max_attempts=2)
 
         LOG.info(f"🚀 AABv2 started successfully! Check interval: {SETTINGS.check_interval_sec}s")
         
