@@ -144,6 +144,32 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
         torrent_name = translate_to_english(torrent_name)
         LOG.info(f"Starting download: {torrent_name}")
 
+        # Get torrent info and find the largest video file
+        torrent_info = handle.torrent_file()
+        files = torrent_info.files()
+        
+        # Find largest video file
+        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
+        largest_file = None
+        largest_size = 0
+        largest_idx = 0
+        
+        for i in range(files.num_files()):
+            file_path = files.file_path(i)
+            file_size = files.file_size(i)
+            file_ext = os.path.splitext(file_path)[1].lower()
+            
+            if file_ext in video_extensions and file_size > largest_size:
+                largest_file = file_path
+                largest_size = file_size
+                largest_idx = i
+        
+        if largest_file:
+            LOG.info(f"Largest video file: {largest_file} ({largest_size / (1024*1024):.2f} MB)")
+        else:
+            LOG.warning(f"No video file found, using torrent name: {torrent_name}")
+            largest_file = torrent_name
+
         last_progress = 0.0
         stall_start: Optional[float] = None
 
@@ -186,8 +212,9 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
             time.sleep(SETTINGS.download_update_interval_sec)
 
         # Sanitize the torrent_name to produce a safe filename on disk
-        safe_name = sanitize_filename(torrent_name)
-        full_path = os.path.join(SAVE_PATH, torrent_name)
+        # Use the actual video file name, not the torrent metadata name
+        safe_name = sanitize_filename(largest_file)
+        full_path = os.path.join(SAVE_PATH, largest_file)
 
         # If the name on disk differs from sanitized, attempt to rename/move
         target_path = os.path.join(SAVE_PATH, safe_name)
