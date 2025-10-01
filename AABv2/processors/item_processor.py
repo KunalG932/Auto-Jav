@@ -70,11 +70,13 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
     if magnet and isinstance(magnet, str):
         async with DOWNLOAD_LOCK:
             try:
+                LOG.info(f"🎬 Starting download process for: {title}")
                 uploaded, msg = await process_video_download(
                     bot_client, file_client, item, title, caption, magnet
                 )
+                LOG.info(f"📤 Download process completed: uploaded={uploaded}, title={title}")
             except Exception as download_error:
-                LOG.error(f"Download/upload failed for {title}: {download_error}")
+                LOG.error(f"Download/upload failed for {title}: {download_error}", exc_info=True)
     else:
         LOG.info(f"No magnet link for {title}, posting with API thumbnail")
         try:

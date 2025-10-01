@@ -68,56 +68,79 @@ async def process_video_download(
     info = await loop.run_in_executor(None, download_torrent, magnet, _progress_cb)
 
     if info and info.get('file') and os.path.exists(info['file']):
+        LOG.info(f"✅ Download successful, starting post-processing for: {info['file']}")
         try:
             await safe_edit(f"✅ Download complete: {title}\nStarting upload...")
         except Exception:
             pass
 
-        upload_path = await remux_if_needed(info['file'], safe_edit, title)
-        
         try:
-            await safe_edit(f"🔄 Encoding/Converting file: {os.path.basename(upload_path)}")
-        except Exception:
-            pass
+            upload_path = await remux_if_needed(info['file'], safe_edit, title)
+            
+            try:
+                await safe_edit(f"🔄 Encoding/Converting file: {os.path.basename(upload_path)}")
+            except Exception:
+                pass
 
-        LOG.info("Encoding disabled; proceeding with original file")
-        await safe_edit("ℹ️ Encoding skipped: proceeding with original file")
+            LOG.info("Encoding disabled; proceeding with original file")
+            try:
+                await safe_edit("ℹ️ Encoding skipped: proceeding with original file")
+            except Exception:
+                pass
 
-        try:
-            up_size = os.path.getsize(upload_path) / (1024.0 * 1024.0)
-            LOG.info(f"Preparing to upload file: {upload_path} ({up_size:.1f} MiB)")
-        except Exception:
-            pass
+            try:
+                up_size = os.path.getsize(upload_path) / (1024.0 * 1024.0)
+                LOG.info(f"Preparing to upload file: {upload_path} ({up_size:.1f} MiB)")
+            except Exception:
+                pass
 
-        try:
-            file_size_bytes = os.path.getsize(upload_path)
-        except Exception:
-            file_size_bytes = 0
+            try:
+                file_size_bytes = os.path.getsize(upload_path)
+            except Exception:
+                file_size_bytes = 0
 
-        part_hashes = []
-        file_hash = None
-        TWO_GB = 2 * 1024 * 1024 * 1024
+            part_hashes = []
+            file_hash = None
+            TWO_GB = 2 * 1024 * 1024 * 1024
 
-        if file_size_bytes > TWO_GB:
-            await safe_edit(f"🔀 File >2GiB detected; splitting into 2 parts for upload")
-            uploaded, part_hashes = await upload_large_file(
-                bot_client, file_client, upload_path, title, item, file_size_bytes, safe_edit
-            )
-        else:
-            uploaded, file_hash = await upload_single_file(
-                bot_client, file_client, upload_path, title, item, caption
-            )
+            LOG.info(f"File size: {file_size_bytes} bytes ({file_size_bytes/(1024**3):.2f} GB)")
+            
+            if file_size_bytes > TWO_GB:
+                LOG.info("File >2GB, will split into parts")
+                await safe_edit(f"🔀 File >2GiB detected; splitting into 2 parts for upload")
+                uploaded, part_hashes = await upload_large_file(
+                    bot_client, file_client, upload_path, title, item, file_size_bytes, safe_edit
+                )
+            else:
+                LOG.info("File <=2GB, uploading as single file")
+                uploaded, file_hash = await upload_single_file(
+                    bot_client, file_client, upload_path, title, item, caption
+                )
 
-        if uploaded:
-            await post_to_main_channel(bot_client, file_client, item, caption, file_hash, part_hashes)
-        
-        await cleanup_files(info['file'], upload_path)
+            LOG.info(f"Upload completed: uploaded={uploaded}, file_hash={file_hash}, part_hashes={part_hashes}")
+            
+            if uploaded:
+                LOG.info("Starting post to main channel...")
+                await post_to_main_channel(bot_client, file_client, item, caption, file_hash, part_hashes)
+                LOG.info(f"✅ Successfully uploaded and posted: {title}")
+            else:
+                LOG.error(f"❌ Upload failed for: {title}")
+            
+            await cleanup_files(info['file'], upload_path)
+            
+        except Exception as upload_error:
+            LOG.error(f"❌ Error during upload process for {title}: {upload_error}", exc_info=True)
+            uploaded = False
+            
+    else:
+        LOG.error(f"❌ Download failed - no file info returned for: {title}")
     
     try:
         await update_msg.delete()
     except Exception:
         pass
     
+    LOG.info(f"Returning from process_video_download: uploaded={uploaded}")
     return uploaded, msg
 
 async def remux_if_needed(file_path: str, safe_edit, title: str) -> str:
