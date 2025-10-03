@@ -362,7 +362,8 @@ async def post_to_main_channel(
                 if mid:
                     asyncio.create_task(_send_sticker_async(sticker_id, mid))
         except Exception:
-            pass        try:
+            pass        
+        try:
             if main_msg is not None:
                 if part_hashes and len(part_hashes) >= 2:
                     kb = InlineKeyboardMarkup([[
