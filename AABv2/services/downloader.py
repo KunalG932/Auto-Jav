@@ -5,48 +5,51 @@ import unicodedata
 import logging
 import tempfile
 from typing import Optional, Dict, Callable, Any
-import libtorrent as lt # type: ignore
+
+try:
+    import libtorrent as lt
+    LIBTORRENT_AVAILABLE = True
+except ImportError as e:
+    LIBTORRENT_AVAILABLE = False
+    lt = None
+    print("\n" + "="*80)
+    print("WARNING: libtorrent could not be imported!")
+    print("="*80)
+    print("Error:", str(e))
+    print("\nTo fix this on Windows:")
+    print("1. Install Visual C++ Redistributables:")
+    print("   - Download: https://aka.ms/vs/17/release/vc_redist.x64.exe")
+    print("   - Install both x64 and x86 versions")
+    print("2. Then run: pip install python-libtorrent")
+    print("="*80 + "\n")
+
 import requests
 from ..config import SETTINGS
 from ..utils import translate_to_english
 
 LOG = logging.getLogger("AABv2")
 
-# Use absolute path for downloads to avoid path resolution issues
 SAVE_PATH = os.path.abspath("./downloads")
 
-
 def sanitize_filename(name: str, max_length: int = 200) -> str:
-    """Return a sanitized filename safe for most filesystems (Windows-friendly).
-
-    - Normalize unicode to NFKD and drop non-ascii where possible.
-    - Replace path-separators and characters invalid on Windows with '_'.
-    - Preserve file extension and limit overall length.
-    """
+    
     if not name:
         return "unnamed"
 
-    # Normalize unicode and try to transliterate to closest ASCII
     nfkd = unicodedata.normalize('NFKD', name)
     try:
         ascii_name = nfkd.encode('ascii', 'ignore').decode('ascii')
     except Exception:
         ascii_name = nfkd
 
-    # Split extension (keep last dot as extension separator)
     base, ext = os.path.splitext(ascii_name)
 
-    # Replace invalid characters with underscore
-    # Disallow <>:"/\\|?* and control chars
     base = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', base)
-    # Collapse multiple underscores
     base = re.sub(r'_+', '_', base).strip(' _.-')
 
-    # Fallback name
     if not base:
         base = 'file'
 
-    # Truncate to max_length minus extension
     max_base = max_length - len(ext)
     if max_base < 10:
         max_base = 10
@@ -56,16 +59,16 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
     safe = f"{base}{ext}"
     return safe
 
-
 def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None) -> Optional[Dict[str, str]]:
-    """
-    Download a torrent using a magnet link or torrent file URL.
-    Returns dict with keys: 'file' (full path) and 'name'.
-    """
+    
+    if not LIBTORRENT_AVAILABLE:
+        LOG.error("libtorrent is not available. Cannot download torrents.")
+        LOG.error("Please install Visual C++ Redistributables and run: pip install python-libtorrent")
+        return None
+    
     try:
         os.makedirs(SAVE_PATH, exist_ok=True)
 
-        # Setup session
         ses = lt.session()
         ses.listen_on(6881, 6891)
         try:
@@ -79,29 +82,24 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
         handle = None
 
         if link.startswith('magnet:'):
-            # Handle magnet link
             handle = lt.add_magnet_uri(ses, link, params)
             LOG.info("Using magnet link")
         else:
-            # Handle torrent file URL - download it first
             LOG.info(f"Downloading torrent file from: {link}")
             try:
                 response = requests.get(link, timeout=30)
                 response.raise_for_status()
                 torrent_data = response.content
                 
-                # Save to temporary file
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.torrent') as tmp_file:
                     tmp_file.write(torrent_data)
                     tmp_path = tmp_file.name
                 
-                # Add torrent from file
                 with open(tmp_path, 'rb') as f:
                     torrent_info = lt.torrent_info(f)
                     params['ti'] = torrent_info
                     handle = ses.add_torrent(params)
                 
-                # Clean up temp file
                 os.unlink(tmp_path)
                 LOG.info("Using torrent file")
                 
@@ -117,7 +115,6 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
         start_time = time.time()
         last_log = 0
 
-        # Wait for metadata (only needed for magnet links)
         while not handle.has_metadata():
             elapsed = time.time() - start_time
             if elapsed - last_log >= 5:
@@ -145,11 +142,9 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
         torrent_name = translate_to_english(torrent_name)
         LOG.info(f"Starting download: {torrent_name}")
 
-        # Get torrent info and find the largest video file
         torrent_info = handle.torrent_file()
         files = torrent_info.files()
         
-        # Find largest video file
         video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
         largest_file = None
         largest_size = 0
@@ -174,7 +169,6 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
         last_progress = 0.0
         stall_start: Optional[float] = None
 
-        # Download loop
         while handle.status().state != lt.torrent_status.seeding:
             s = handle.status()
             prog = s.progress
@@ -195,12 +189,11 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
                 except Exception:
                     pass
 
-            # Stall detection
             if prog > last_progress:
                 last_progress = prog
                 stall_start = None
             else:
-                if down_rate < 1024:  # <1KB/s
+                if down_rate < 1024:
                     if stall_start is None:
                         stall_start = time.time()
                     elif time.time() - stall_start >= SETTINGS.torrent_stall_timeout_sec:
@@ -212,18 +205,13 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
 
             time.sleep(SETTINGS.download_update_interval_sec)
 
-        # Sanitize the torrent_name to produce a safe filename on disk
-        # Use the actual video file name, not the torrent metadata name
         safe_name = sanitize_filename(largest_file)
         full_path = os.path.join(SAVE_PATH, largest_file)
 
-        # Check if file exists at expected path
         if not os.path.exists(full_path):
-            # File might be in a subdirectory, search for it
             LOG.warning(f"File not found at expected path: {full_path}")
             LOG.info(f"Searching for video file in: {SAVE_PATH}")
             
-            # Search for the largest video file in the download directory
             found_file = None
             found_size = 0
             video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
@@ -247,11 +235,9 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
                 ses.remove_torrent(handle)
                 return None
 
-        # If the name on disk differs from sanitized, attempt to rename/move
         target_path = os.path.join(SAVE_PATH, safe_name)
         try:
             if os.path.exists(full_path) and full_path != target_path:
-                # Avoid clobbering an existing path - add index suffix when needed
                 if os.path.exists(target_path):
                     base, ext = os.path.splitext(safe_name)
                     idx = 1

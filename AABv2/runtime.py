@@ -11,7 +11,7 @@ from .db import client as mongo_client, is_working, set_working
 from .handlers import alive_command, logs_command, status_command, start_command
 from .handlers.commands import set_clients
 from .processors import process_item, check_for_new_items
-from .services.api_health import warm_up_api
+from .api.api_health import warm_up_api
 
 LOG = logging.getLogger("AABv2")
 logging.basicConfig(

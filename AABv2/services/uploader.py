@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from ..config import SETTINGS
-from .ai_caption import fetch_and_format, format_for_post
+from ..api.ai_caption import fetch_and_format, format_for_post
 
 LOG = logging.getLogger("AABv2")
 
@@ -51,7 +51,6 @@ def prepare_caption_content(item: Dict[str, Any]) -> str:
     
     return " | ".join([c for c in chunks if c])
 
-
 async def upload_file(file_client, file_path: str, title: Optional[str] = None,
                       item: Optional[Dict[str, Any]] = None,
                       send_ai_caption: bool = False) -> Optional[Message]:
@@ -64,7 +63,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
         LOG.error(f"Error while resolving file path: {e}")
         return None
 
-    # No AI caption, use original description from API
     if title:
         doc_caption = title
     else:
@@ -73,7 +71,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     if not title and not doc_caption:
         doc_caption = os.path.basename(abs_path)
 
-    # Download thumbnail from API if available
     thumb_path = None
     if item and item.get('thumbnail'):
         try:
@@ -105,7 +102,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
             LOG.warning(f"Failed to download thumbnail from API: {e}")
             thumb_path = None
     
-    # Fallback to static thumbnail if API download failed
     if not thumb_path:
         try:
             tp = getattr(SETTINGS, 'thumbnail_path', None)
@@ -178,7 +174,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
                 pass
 
     return msg
-
 
 async def add_download_button(bot, message: Message, bot_username: str, file_hash: str) -> None:
     try:

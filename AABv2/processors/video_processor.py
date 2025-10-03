@@ -9,7 +9,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from ..config import SETTINGS
 from ..services.downloader import download_torrent
 from ..services.uploader import upload_file, add_download_button, prepare_caption_content
-from ..services.ai_caption import fetch_and_format, format_for_post, create_enhanced_caption
+from ..api.ai_caption import fetch_and_format, format_for_post, create_enhanced_caption
 from ..utils import generate_hash
 from ..db import add_file_record
 
@@ -85,34 +85,44 @@ async def process_video_download(
         try:
             upload_path = await remux_if_needed(info['file'], safe_edit, title)
             
-            # Encode video to 720p if encoding is enabled
             if SETTINGS.enable_encoding:
                 try:
                     await safe_edit(f"🔄 Encoding to 720p: {os.path.basename(upload_path)}")
-                    LOG.info(f"Starting encoding for: {upload_path}")
+                    LOG.info(f"Starting FFEncoder encoding for: {upload_path}")
                     
-                    # Import encode function
-                    from ..services.encode import encode_file
+                    from ..services.encode import FFEncoder
                     
-                    # Run encoding in executor to avoid blocking
-                    loop = asyncio.get_event_loop()
-                    encoded_path = await loop.run_in_executor(None, encode_file, upload_path, None)
+                    file_name = os.path.basename(upload_path)
+                    base_name, ext = os.path.splitext(file_name)
+                    output_name = f"{base_name}_encoded.mkv"
+                    
+                    encoder = FFEncoder(upload_path, output_name)
+                    
+                    encoded_path = await encoder.start_encode()
                     
                     if encoded_path and os.path.exists(encoded_path):
-                        LOG.info(f"✅ Encoding successful: {encoded_path}")
-                        # Clean up original file if encoding succeeded
+                        LOG.info(f"✅ FFEncoder encoding successful: {encoded_path}")
+                        
+                        original_size = os.path.getsize(upload_path) / (1024 * 1024)
+                        encoded_size = os.path.getsize(encoded_path) / (1024 * 1024)
+                        reduction = ((original_size - encoded_size) / original_size * 100) if original_size > 0 else 0
+                        
+                        LOG.info(f"Size: {original_size:.1f}MB → {encoded_size:.1f}MB ({reduction:+.1f}%)")
+                        
                         try:
                             if upload_path != info['file']:
                                 os.remove(upload_path)
-                        except Exception:
-                            pass
+                                LOG.info(f"Cleaned up original file: {upload_path}")
+                        except Exception as e:
+                            LOG.warning(f"Failed to cleanup original file: {e}")
+                        
                         upload_path = encoded_path
-                        await safe_edit(f"✅ Encoded to 720p: {os.path.basename(upload_path)}")
+                        await safe_edit(f"✅ Encoded to 720p: {os.path.basename(upload_path)}\nSize reduced by {abs(reduction):.1f}%")
                     else:
-                        LOG.warning("Encoding failed, using original file")
+                        LOG.warning("FFEncoder encoding failed, using original file")
                         await safe_edit("⚠️ Encoding failed, using original file")
                 except Exception as e:
-                    LOG.error(f"Encoding error: {e}", exc_info=True)
+                    LOG.error(f"FFEncoder encoding error: {e}", exc_info=True)
                     await safe_edit("⚠️ Encoding failed, using original file")
             else:
                 LOG.info("Encoding disabled; proceeding with original file")
@@ -308,7 +318,6 @@ async def post_to_main_channel(
         bot_user = await forward_client.get_me()
         bot_username = getattr(bot_user, 'username', '') or ''
 
-        # Use enhanced caption with episode, duration, rating, and AI description
         title = item.get('title', 'Video')
         post_caption = create_enhanced_caption(title, item, video_path)
 
@@ -359,7 +368,7 @@ async def post_to_main_channel(
         LOG.error(f"Failed to post to main channel: {e}")
 
 async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
-    """Download thumbnail from API"""
+    
     thumbnail_url = item.get('thumbnail')
     if not thumbnail_url:
         LOG.warning("No thumbnail URL in item")
@@ -369,22 +378,18 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
         import requests
         import tempfile
         
-        # Download thumbnail
         response = requests.get(thumbnail_url, timeout=15)
         response.raise_for_status()
         
-        # Save to temp file
         thumb_dir = "./thumbnails"
         os.makedirs(thumb_dir, exist_ok=True)
         
-        # Get file extension from URL or default to .jpg
         ext = '.jpg'
         if '.' in thumbnail_url:
             url_ext = thumbnail_url.split('.')[-1].split('?')[0].lower()
             if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
                 ext = f'.{url_ext}'
         
-        # Use code as filename if available
         code = item.get('code', 'thumb')
         thumb_path = os.path.join(thumb_dir, f"{code}{ext}")
         

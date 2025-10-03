@@ -6,10 +6,7 @@ from ..config import SETTINGS
 LOG = logging.getLogger("AABv2")
 
 def ping_api() -> bool:
-    """
-    Ping the API to wake it up if it's cold starting (e.g., Render free tier).
-    Returns True if API is reachable, False otherwise.
-    """
+    
     try:
         LOG.info("🏓 Pinging API to check availability...")
         response = requests.get(
@@ -33,10 +30,7 @@ def ping_api() -> bool:
         return False
 
 def warm_up_api(max_attempts: int = 3) -> bool:
-    """
-    Warm up the API with multiple attempts if needed.
-    Useful for cold-start scenarios on free hosting tiers.
-    """
+    
     import time
     
     for attempt in range(1, max_attempts + 1):

@@ -1,6 +1,6 @@
 import logging
 from typing import List, Dict, Any, Optional
-from ..services.feed import fetch_jav, get_title, sha1
+from ..api.feed import fetch_jav, get_title, sha1
 from ..db import get_last_hash, set_last_hash, get_file_by_hash
 
 LOG = logging.getLogger("AABv2")

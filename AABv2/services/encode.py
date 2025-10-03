@@ -1,133 +1,77 @@
-"""
-Video encoding module using FFmpeg.
+from os import path as ospath, makedirs
+from aiofiles.os import rename as aiorename
+from asyncio import create_subprocess_shell
+from asyncio.subprocess import PIPE
+import glob
 
-Provides functions to encode videos with quality constraints (max 720p resolution).
-All videos are re-encoded to ensure consistent quality and reduce file size.
-"""
-import os
-import subprocess
-import logging
-from typing import Optional, Dict, Any
-from ..config import SETTINGS
+FFARGS_720P = (
+    "-c:v libx264 -preset veryfast -crf 28 "
+    "-pix_fmt yuv420p -movflags +faststart "
+    "-c:a libopus -b:a 80k -vbr on -c:s copy"
+)
 
-LOG = logging.getLogger("AABv2")
+SCALE_720P = "scale=1280:720"
 
-def get_video_info(file_path: str) -> Dict[str, Any]:
-    """Get video information using ffprobe."""
-    try:
-        cmd = [
-            'ffprobe',
-            '-v', 'error',
-            '-select_streams', 'v:0',
-            '-show_entries', 'stream=width,height,duration,bit_rate',
-            '-of', 'json',
-            file_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
-            import json
-            data = json.loads(result.stdout)
-            if 'streams' in data and len(data['streams']) > 0:
-                stream = data['streams'][0]
-                return {
-                    'width': int(stream.get('width', 0)),
-                    'height': int(stream.get('height', 0)),
-                    'duration': float(stream.get('duration', 0)),
-                    'bit_rate': int(stream.get('bit_rate', 0))
-                }
-    except Exception as e:
-        LOG.warning(f"Failed to get video info: {e}")
-    return {}
+if not ospath.exists("encode"):
+    makedirs("encode", exist_ok=True)
 
-def encode_file(input_path: str, output_path: Optional[str] = None) -> Optional[str]:
-    """
-    Encode video file with 720p max resolution and quality settings.
-    
-    Args:
-        input_path: Path to input video file
-        output_path: Optional output path (default: adds _encoded suffix)
-        
-    Returns:
-        Path to encoded file, or None on failure
-    """
-    if not os.path.exists(input_path):
-        LOG.error(f"Input file does not exist: {input_path}")
-        return None
-    
-    if output_path is None:
-        base, ext = os.path.splitext(input_path)
-        output_path = f"{base}_encoded.mp4"
-    
-    try:
-        # Get video info to check current resolution
-        info = get_video_info(input_path)
-        width = info.get('width', 0)
-        height = info.get('height', 0)
-        
-        LOG.info(f"Encoding video: {input_path} (current: {width}x{height})")
-        LOG.info(f"Target: max 720p, CRF={SETTINGS.encode_crf}")
-        
-        # Build ffmpeg command with 720p limit
-        cmd = [
-            'ffmpeg',
-            '-y',  # Overwrite output file
-            '-i', input_path,
-            '-c:v', SETTINGS.encode_video_codec,  # Video codec (h264 or h265)
-            '-crf', str(SETTINGS.encode_crf),  # Quality (lower = better, 23 is default)
-            '-preset', SETTINGS.encode_preset,  # Encoding speed/quality tradeoff
-            '-vf', f'scale=\'min({SETTINGS.max_resolution_width},iw)\':-2',  # Scale to max 720p width, maintain aspect ratio
-            '-c:a', SETTINGS.encode_audio_codec,  # Audio codec
-            '-b:a', SETTINGS.encode_audio_bitrate,  # Audio bitrate
-            '-movflags', '+faststart',  # Enable streaming
-            '-max_muxing_queue_size', '1024',  # Prevent muxing issues
-            output_path
-        ]
-        
-        LOG.info(f"Running ffmpeg: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-        
-        if result.returncode == 0 and os.path.exists(output_path):
-            input_size = os.path.getsize(input_path) / (1024 * 1024)
-            output_size = os.path.getsize(output_path) / (1024 * 1024)
-            reduction = ((input_size - output_size) / input_size * 100) if input_size > 0 else 0
-            
-            LOG.info(f"✅ Encoding successful: {output_path}")
-            LOG.info(f"Size: {input_size:.1f}MB → {output_size:.1f}MB ({reduction:+.1f}%)")
-            return output_path
+class FFEncoder:
+    def __init__(self, path, name):
+        self.__proc = None
+        self.is_cancelled = False
+        self.__name = name
+        self.dl_path = path
+        self.out_path = ospath.join("encode", name)
+
+    async def start_encode(self):
+        dl_npath = ospath.join("encode", "ffanimeadvin.mkv")
+        out_npath = ospath.join("encode", "ffanimeadvout.mkv")
+
+        if ospath.isdir(self.dl_path):
+            files = glob.glob(ospath.join(self.dl_path, "*.mkv")) + glob.glob(ospath.join(self.dl_path, "*.mp4"))
+            if not files:
+                raise FileNotFoundError(f"No video file found inside directory: {self.dl_path}")
+            video_file = files[0]
         else:
-            LOG.error(f"FFmpeg encoding failed with code {result.returncode}")
-            LOG.error(f"stderr: {result.stderr[:500]}")
-            return None
-            
-    except subprocess.TimeoutExpired:
-        LOG.error("FFmpeg encoding timeout (>1 hour)")
-        return None
-    except FileNotFoundError:
-        LOG.error("FFmpeg not found - please install ffmpeg")
-        return None
-    except Exception as e:
-        LOG.error(f"Encoding error: {e}", exc_info=True)
-        return None
+            video_file = self.dl_path
 
-def encode_with_crf(input_path: str, crf: int = 23, output_path: Optional[str] = None) -> Optional[str]:
-    """
-    Encode video with specific CRF value (quality setting).
-    
-    Args:
-        input_path: Path to input video file
-        crf: Constant Rate Factor (0-51, lower = better quality, 23 = default)
-        output_path: Optional output path
-        
-    Returns:
-        Path to encoded file, or None on failure
-    """
-    # Temporarily override CRF setting
-    original_crf = SETTINGS.encode_crf
-    object.__setattr__(SETTINGS, 'encode_crf', crf)
-    
-    try:
-        result = encode_file(input_path, output_path)
-        return result
-    finally:
-        # Restore original CRF
-        object.__setattr__(SETTINGS, 'encode_crf', original_crf)
+        await aiorename(video_file, dl_npath)
+
+        ffcode = (
+            f"ffmpeg -hide_banner -loglevel error -i '{dl_npath}' "
+            f"-vf '{SCALE_720P}:flags=fast_bilinear' "
+            f"-map 0:v -map 0:a -map 0:s? "
+            f"{FFARGS_720P} "
+            f"-metadata title='@The_Wyverns' "
+            f"-metadata author='@The_Wyverns' "
+            f"-metadata artist='@The_Wyverns' "
+            f"-metadata album='@The_Wyverns' "
+            f"-metadata description='Encoded by @The_Wyverns' "
+            f"-metadata comment='@The_Wyverns' "
+            f"-metadata:s:s title='@The_Wyverns' "
+            f"-metadata:s:a title='@The_Wyverns' "
+            f"-metadata:s:v title='@The_Wyverns' "
+            f"'{out_npath}' -y"
+        )
+
+        self.__proc = await create_subprocess_shell(ffcode, stdout=PIPE, stderr=PIPE)
+        await self.__proc.wait()
+
+        await aiorename(dl_npath, self.dl_path)
+
+        if self.is_cancelled:
+            return None
+
+        if self.__proc.returncode == 0 and ospath.exists(out_npath):
+            await aiorename(out_npath, self.out_path)
+            return self.out_path
+        else:
+            return None
+
+    async def cancel_encode(self):
+        self.is_cancelled = True
+        if self.__proc is not None:
+            try:
+                self.__proc.kill()
+            except:
+                pass

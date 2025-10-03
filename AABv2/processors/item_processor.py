@@ -6,9 +6,9 @@ from pyrogram.client import Client
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from ..config import SETTINGS
 from ..db import get_file_by_hash, add_file_record
-from ..services.feed import get_title, sha1
+from ..api.feed import get_title, sha1
 from ..services.uploader import build_caption, prepare_caption_content, add_download_button
-from ..services.ai_caption import fetch_and_format, format_for_post
+from ..api.ai_caption import fetch_and_format, format_for_post
 from ..utils import generate_hash
 from .video_processor import process_video_download
 
@@ -161,7 +161,7 @@ async def post_without_file(bot_client: Client, item: Dict[str, Any], caption: s
     
     try:
         if main_msg is not None:
-            sticker_id = "CAACAgUAAx0CfPp_PwABAX9taNZsQyInPz500GChLCk3uconkqwAAhESAALeIohXvOSc_GX-md4eBA"
+            sticker_id = "CAACAgUAAx0CfPp_PwABAbRpaN9Edq9LmkFQPK_ea8U4u8I7_2MAAq8YAAKcZulW-3JDFK03uP8eBA"
             mid = getattr(main_msg, 'id', None)
             
             async def _send_sticker_async(sid, reply_id):

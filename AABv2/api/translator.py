@@ -4,11 +4,8 @@ from ..utils import translate_to_english
 
 LOG = logging.getLogger("AABv2")
 
-
 def translate_item(item: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Recursively translate all string values in the item to English.
-    """
+    
     if isinstance(item, dict):
         return {key: translate_item(value) for key, value in item.items()}
     elif isinstance(item, list):
@@ -18,10 +15,7 @@ def translate_item(item: Dict[str, Any]) -> Dict[str, Any]:
     else:
         return item
 
-
 def translate_api_response(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Translate all text in the API response results to English.
-    """
+    
     LOG.info(f"Translating {len(results)} items to English")
     return [translate_item(item) for item in results]

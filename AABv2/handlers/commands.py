@@ -36,14 +36,7 @@ async def status_command(client: Client, message: Message):
     working = is_working()
     last_hash = get_last_hash()
     
-    status_text = f"""
-🤖 **AABv2 Status**
-
-**Working**: {'✅ Yes' if working else '❌ No'}
-**Last Hash**: `{last_hash or 'None'}`
-**Downloads Directory**: {'✅ Exists' if os.path.exists('./downloads') else '❌ Missing'}
-**Log File**: {'✅ Exists' if os.path.exists('logging_v2.txt') else '❌ Missing'}
-"""
+    status_text = f
     await message.reply_text(status_text)
 
 async def start_command(client: Client, message: Message):
