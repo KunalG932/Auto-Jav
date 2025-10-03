@@ -9,7 +9,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from ..config import SETTINGS
 from ..services.downloader import download_torrent
 from ..services.uploader import upload_file, add_download_button, prepare_caption_content
-from ..services.ai_caption import fetch_and_format, format_for_post
+from ..services.ai_caption import fetch_and_format, format_for_post, create_enhanced_caption
 from ..utils import generate_hash
 from ..db import add_file_record
 
@@ -154,7 +154,7 @@ async def process_video_download(
             
             if uploaded:
                 LOG.info("Starting post to main channel...")
-                await post_to_main_channel(bot_client, file_client, item, caption, file_hash, part_hashes)
+                await post_to_main_channel(bot_client, file_client, item, caption, file_hash, part_hashes, upload_path)
                 LOG.info(f"✅ Successfully uploaded and posted: {title}")
             else:
                 LOG.error(f"❌ Upload failed for: {title}")
@@ -300,15 +300,17 @@ async def post_to_main_channel(
     item: Dict[str, Any],
     caption: str,
     file_hash: Optional[str],
-    part_hashes: list
+    part_hashes: list,
+    video_path: Optional[str] = None
 ):
     try:
         forward_client = file_client if file_client else bot_client
         bot_user = await forward_client.get_me()
         bot_username = getattr(bot_user, 'username', '') or ''
 
-        # Use original caption from API, no AI generation
-        post_caption = caption
+        # Use enhanced caption with episode, duration, rating, and AI description
+        title = item.get('title', 'Video')
+        post_caption = create_enhanced_caption(title, item, video_path)
 
         thumb_image = await generate_thumbnail(item)
 

@@ -1,6 +1,8 @@
 import requests
 import logging
-from typing import Optional
+import subprocess
+import os
+from typing import Optional, Dict, Any
 import re
 import random
 
@@ -62,7 +64,6 @@ def fetch_and_format(content: str, timeout: int = 8) -> Optional[str]:
                     "  - Output ONLY the caption text (no lists, no JSON, no code formatting).\n"
                     "  - One or two short paragraphs max—make it punchy, juicy, and dripping with playful energy🔥.\n"
                     "  - Slide in naughty emojis like 😈🍑🍆💦🔥🍓🍭 naturally, not overloaded.\n"
-                    "  - Hide a rating inside the flow with the literal word 'Rating:' (e.g. '➪ Rating: 98/10 💦').\n"
                     "  - Prefer the rating to pop up mid-caption like a cheeky reveal😉.\n"
                     "  - Replace raw explicit words with sexy euphemisms and flirty innuendos✨.\n"
                     "  - Tone: theatrical, horny, outrageous—but always entertaining💃.\n\n"
@@ -104,6 +105,116 @@ def fetch_and_format(content: str, timeout: int = 8) -> Optional[str]:
 
     LOG.debug(f"AI caption service returned no content: {data}")
     return None
+
+def get_video_duration(file_path: str) -> Optional[str]:
+    """Get video duration in MM:SS or HH:MM:SS format using ffprobe."""
+    if not os.path.exists(file_path):
+        return None
+    
+    try:
+        cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            file_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0 and result.stdout.strip():
+            duration_sec = float(result.stdout.strip())
+            hours = int(duration_sec // 3600)
+            minutes = int((duration_sec % 3600) // 60)
+            seconds = int(duration_sec % 60)
+            
+            if hours > 0:
+                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                return f"{minutes:02d}:{seconds:02d}"
+    except Exception as e:
+        LOG.warning(f"Failed to get video duration: {e}")
+    
+    return None
+
+def create_enhanced_caption(title: str, item: Dict[str, Any], video_path: Optional[str] = None) -> str:
+    """
+    Create enhanced caption with episode number, duration, rating, recommendation, and AI description.
+    
+    Format:
+    <title>
+    ➪ Episode:- 01 [<duration>]
+    ➪ Subtitle:- English✅
+    ➪ Rating:- <rating>/10
+    #<RECOMMENDATION_TAG>
+    
+    <AI Description>
+    
+    ᴘᴏᴡᴇʀᴇᴅ ʙʏ: @The_Wyverns
+    """
+    # Get duration from video file
+    duration = "Unknown"
+    if video_path and os.path.exists(video_path):
+        video_duration = get_video_duration(video_path)
+        if video_duration:
+            duration = video_duration
+    
+    # Generate random rating (7.5 to 9.9)
+    rating = round(random.uniform(7.5, 9.9), 1)
+    
+    # Choose random recommendation tag
+    recommendations = [
+        "RECOMMENDED",
+        "HIGHLY_RECOMMENDED",
+        "ADMIN_RECOMMENDED",
+        "MUST_WATCH",
+        "TOP_PICK",
+        "STAFF_FAVORITE"
+    ]
+    recommendation = random.choice(recommendations)
+    
+    # Get description from API first, then fallback to AI, then default
+    description = ""
+    
+    # Priority 1: Use description from API if available
+    api_description = item.get('description', '').strip()
+    if api_description:
+        description = api_description
+        LOG.info("Using description from API")
+    else:
+        # Priority 2: Try to generate with AI
+        try:
+            code = item.get('code', '')
+            title_text = item.get('title', title)
+            
+            # Create prompt for AI
+            prompt = f"Title: {title_text}\nCode: {code}\nGenerate a short, enticing 2-3 sentence description."
+            
+            ai_result = fetch_and_format(prompt, timeout=10)
+            if ai_result:
+                description = ai_result
+                LOG.info("Generated description using AI")
+            else:
+                # Priority 3: Default fallback description
+                description = "🔥 An absolutely captivating experience that will leave you wanting more! Don't miss this masterpiece! 💯"
+                LOG.info("Using default fallback description")
+        except Exception as e:
+            LOG.warning(f"Failed to generate AI description: {e}")
+            # Priority 3: Default fallback description
+            description = "🔥 An absolutely captivating experience that will leave you wanting more! Don't miss this masterpiece! 💯"
+    
+    # Build the caption
+    caption_parts = [
+        f"📺 {title}",
+        f"➪ Episode:- 01 [{duration}]",
+        f"➪ Subtitle:- English✅",
+        f"➪ Rating:- {rating}/10",
+        f"#{recommendation}",
+        "",
+        description,
+        "",
+        "ᴘᴏᴡᴇʀᴇᴅ ʙʏ: @The_Wyverns"
+    ]
+    
+    return "\n".join(caption_parts)
 
 def format_for_post(raw: Optional[str]) -> Optional[str]:
     if not raw or not isinstance(raw, str):
