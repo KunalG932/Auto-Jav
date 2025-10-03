@@ -3,7 +3,7 @@ import requests
 from typing import Optional
 from ..config import SETTINGS
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 def ping_api() -> bool:
     

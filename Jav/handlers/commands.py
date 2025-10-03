@@ -8,7 +8,7 @@ from ..db import is_working, get_last_hash, get_file_by_hash
 from ..config import SETTINGS
 from ..services.start import start_cmd
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 bot_instance = None
 file_client_instance = None
@@ -19,7 +19,7 @@ def set_clients(bot, file_client):
     file_client_instance = file_client
 
 async def alive_command(client: Client, message: Message):
-    await message.reply_text("🤖 AABv2 is alive and running!")
+    await message.reply_text("🤖 Jav is alive and running!")
 
 async def logs_command(client: Client, message: Message):
     user_id = getattr(message.from_user, 'id', None)

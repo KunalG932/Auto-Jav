@@ -6,7 +6,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from ..config import SETTINGS
 from ..api.ai_caption import fetch_and_format, format_for_post
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 def build_caption(item: Dict[str, Any]) -> str:
     title = item.get('title') or 'Unknown Title'

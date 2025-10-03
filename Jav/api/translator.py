@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List
 from ..utils import translate_to_english
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 def translate_item(item: Dict[str, Any]) -> Dict[str, Any]:
     

@@ -12,7 +12,7 @@ from ..api.ai_caption import fetch_and_format, format_for_post
 from ..utils import generate_hash
 from .video_processor import process_video_download
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 DOWNLOAD_LOCK = asyncio.Semaphore(1)
 
 async def process_item(bot_client: Optional[Client], file_client: Optional[Client], item: Dict[str, Any]) -> None:

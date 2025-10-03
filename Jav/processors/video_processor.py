@@ -13,7 +13,7 @@ from ..api.ai_caption import fetch_and_format, format_for_post, create_enhanced_
 from ..utils import generate_hash
 from ..db import add_file_record
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 async def process_video_download(
     bot_client: Client,

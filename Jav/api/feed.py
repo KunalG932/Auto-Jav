@@ -5,7 +5,7 @@ import time
 import requests
 from ..config import SETTINGS
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 def sha1(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()

@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 import re
 import random
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 NSFW_WORDS = [
     r"\btits\b",

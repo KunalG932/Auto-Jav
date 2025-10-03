@@ -16,4 +16,4 @@ RUN pip install --no-cache-dir -U -r requirements.txt
 
 COPY . .
 
-CMD ["python", "-m", "AABv2"]
+CMD ["python", "-m", "Jav"]

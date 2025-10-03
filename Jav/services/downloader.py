@@ -27,7 +27,7 @@ import requests
 from ..config import SETTINGS
 from ..utils import translate_to_english
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 SAVE_PATH = os.path.abspath("./downloads")
 

@@ -4,7 +4,7 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from .config import SETTINGS
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 try:
     client = MongoClient(SETTINGS.mongo_uri, server_api=ServerApi('1'))

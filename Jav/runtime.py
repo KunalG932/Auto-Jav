@@ -13,7 +13,7 @@ from .handlers.commands import set_clients
 from .processors import process_item, check_for_new_items
 from .api.api_health import warm_up_api
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -119,7 +119,7 @@ async def main():
         LOG.info("🔥 Warming up API (checking if service is available)...")
         warm_up_api(max_attempts=2)
 
-        LOG.info(f"🚀 AABv2 started successfully! Check interval: {SETTINGS.check_interval_sec}s")
+        LOG.info(f"🚀 Jav started successfully! Check interval: {SETTINGS.check_interval_sec}s")
         
         await worker_loop()
         

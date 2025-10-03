@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 from ..api.feed import fetch_jav, get_title, sha1
 from ..db import get_last_hash, set_last_hash, get_file_by_hash
 
-LOG = logging.getLogger("AABv2")
+LOG = logging.getLogger("Jav")
 
 def check_for_new_items() -> Optional[List[Dict[str, Any]]]:
     try:
