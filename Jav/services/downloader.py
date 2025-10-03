@@ -133,7 +133,9 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
                         pass
                 last_log = elapsed
             if elapsed >= SETTINGS.torrent_metadata_timeout_sec:
-                LOG.error(f"Metadata timeout after {int(elapsed)}s")
+                st = handle.status()
+                reason = "No peers found" if st.num_peers == 0 else "Timeout"
+                LOG.error(f"Metadata timeout after {int(elapsed)}s - {reason} (peers: {st.num_peers})")
                 ses.remove_torrent(handle)
                 return None
             time.sleep(1)

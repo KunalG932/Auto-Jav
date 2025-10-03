@@ -179,6 +179,17 @@ async def process_video_download(
             
     else:
         LOG.error(f"❌ Download failed - no file info returned for: {title}")
+        # Notify production chat about the failure
+        try:
+            await bot_client.send_message(
+                SETTINGS.production_chat,
+                f"❌ **Download Failed**\n\n"
+                f"Title: `{title}`\n"
+                f"Reason: No peers/seeders available or timeout\n\n"
+                f"⚠️ This video has been marked as failed and won't be retried."
+            )
+        except Exception as notify_error:
+            LOG.warning(f"Failed to notify production chat: {notify_error}")
     
     try:
         await update_msg.delete()
