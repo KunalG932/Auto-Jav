@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from pyrogram.client import Client
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from ..config import SETTINGS
-from ..db import get_file_by_hash, add_file_record
+from ..db import get_file_by_hash, add_file_record, is_failed_download
 from ..api.feed import get_title, sha1
 from ..services.uploader import prepare_caption_content, add_download_button
 from ..api.ai_caption import fetch_and_format, format_for_post
@@ -21,6 +21,18 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
         return
 
     title = get_title(item) or 'Unknown Title'
+    
+    # Check if this download has failed before
+    if is_failed_download(title):
+        LOG.info(f"⏭️ Skipping previously failed download: {title}")
+        try:
+            await bot_client.send_message(
+                SETTINGS.production_chat, 
+                f"⚠️ Skipped (previously failed): {title}"
+            )
+        except Exception:
+            pass
+        return
     
     try:
         item_hash = sha1(title)
@@ -74,8 +86,17 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
                     bot_client, file_client, item, title, title, magnet
                 )
                 LOG.info(f"📤 Download process completed: uploaded={uploaded}, title={title}")
+                
+                # Mark as failed if upload was not successful
+                if not uploaded:
+                    from ..db import add_failed_download
+                    add_failed_download(title, magnet, "Upload failed after download")
+                    
             except Exception as download_error:
                 LOG.error(f"Download/upload failed for {title}: {download_error}", exc_info=True)
+                # Mark this download as failed to prevent retrying
+                from ..db import add_failed_download
+                add_failed_download(title, magnet, str(download_error))
     else:
         LOG.info(f"No magnet link for {title}, posting with API thumbnail")
         try:

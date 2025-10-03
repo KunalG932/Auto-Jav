@@ -1,3 +1,5 @@
+# 
+
 import os
 import time
 import asyncio
@@ -359,8 +361,8 @@ async def post_to_main_channel(
             if main_msg is not None:
                 if part_hashes and len(part_hashes) >= 2:
                     kb = InlineKeyboardMarkup([[
-                        InlineKeyboardButton(text="Part 1", url=f"https://t.me/{bot_username}?start={part_hashes[0]}"),
-                        InlineKeyboardButton(text="Part 2", url=f"https://t.me/{bot_username}?start={part_hashes[1]}")
+                        InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗣𝗔𝗥𝗧 𝟭", url=f"https://t.me/{bot_username}?start={part_hashes[0]}"),
+                        InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗣𝗔𝗥𝗧 𝟮", url=f"https://t.me/{bot_username}?start={part_hashes[1]}")
                     ]])
                     chat_id = getattr(main_msg, 'chat', None)
                     mid = getattr(main_msg, 'id', None)

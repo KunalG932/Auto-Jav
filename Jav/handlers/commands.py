@@ -6,7 +6,7 @@ from pyrogram.client import Client
 from pyrogram.types import Message
 from pyrogram import enums
 from .utils import send_logs_to_user
-from ..db import is_working, get_last_hash, get_file_by_hash, get_total_users, get_all_user_ids
+from ..db import is_working, get_last_hash, get_file_by_hash, get_total_users, get_all_user_ids, failed_downloads, remove_failed_download
 from ..config import SETTINGS
 from ..services.start import start_cmd
 
@@ -196,3 +196,92 @@ async def broadcast_command(client: Client, message: Message):
     except Exception as e:
         LOG.error(f"Error in broadcast command: {e}")
         await message.reply_text(f"❌ Error during broadcast: {str(e)}")
+
+async def failed_command(client: Client, message: Message):
+    """
+    Admin command to view and manage failed downloads.
+    Usage: 
+      /failed - Show list of failed downloads
+      /failed clear - Clear all failed downloads
+      /failed remove <title> - Remove specific failed download
+    """
+    try:
+        text = (message.text or '').strip().split(maxsplit=2)
+        command = text[0] if len(text) > 0 else '/failed'
+        action = text[1].lower() if len(text) > 1 else None
+        param = text[2] if len(text) > 2 else None
+        
+        # Clear all failed downloads
+        if action == 'clear':
+            try:
+                result = failed_downloads.delete_many({})
+                await message.reply_text(
+                    f"🗑️ **Cleared Failed Downloads**\\n\\n"
+                    f"Deleted {result.deleted_count} failed download records.\\n"
+                    f"These videos can now be downloaded again."
+                )
+                LOG.info(f"Cleared {result.deleted_count} failed downloads")
+                return
+            except Exception as e:
+                await message.reply_text(f"❌ Error clearing failed downloads: {str(e)}")
+                return
+        
+        # Remove specific failed download
+        if action == 'remove' and param:
+            try:
+                remove_failed_download(param)
+                await message.reply_text(
+                    f"✅ **Removed from Failed List**\\n\\n"
+                    f"Title: `{param}`\\n\\n"
+                    f"This video can now be downloaded again."
+                )
+                return
+            except Exception as e:
+                await message.reply_text(f"❌ Error removing failed download: {str(e)}")
+                return
+        
+        # List all failed downloads
+        try:
+            failed_list = list(failed_downloads.find({}).sort('failed_at', -1).limit(50))
+            
+            if not failed_list:
+                await message.reply_text(
+                    "✅ **No Failed Downloads**\\n\\n"
+                    "There are no failed downloads in the database."
+                )
+                return
+            
+            response = f"❌ **Failed Downloads ({len(failed_list)})**\\n\\n"
+            
+            for idx, item in enumerate(failed_list[:20], 1):
+                title = item.get('title', 'Unknown')
+                reason = item.get('reason', 'Unknown reason')
+                failed_date = item.get('failed_date', 'Unknown date')
+                
+                # Truncate title if too long
+                if len(title) > 50:
+                    title = title[:47] + "..."
+                
+                response += f"{idx}. **{title}**\\n"
+                response += f"   ├ Date: `{failed_date}`\\n"
+                response += f"   └ Reason: `{reason[:50]}`\\n\\n"
+            
+            if len(failed_list) > 20:
+                response += f"\\n...and {len(failed_list) - 20} more\\n\\n"
+            
+            response += (
+                "**Commands:**\\n"
+                "• `/failed` - Show this list\\n"
+                "• `/failed clear` - Clear all failed downloads\\n"
+                "• `/failed remove <title>` - Remove specific title\\n"
+            )
+            
+            await message.reply_text(response)
+            
+        except Exception as e:
+            await message.reply_text(f"❌ Error fetching failed downloads: {str(e)}")
+            LOG.error(f"Error in failed command: {e}")
+            
+    except Exception as e:
+        LOG.error(f"Error in failed command: {e}")
+        await message.reply_text(f"❌ Error: {str(e)}")

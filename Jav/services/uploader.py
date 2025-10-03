@@ -152,7 +152,7 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
 async def add_download_button(bot, message: Message, bot_username: str, file_hash: str) -> None:
     try:
         markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(text="Download Now", url=f"https://t.me/{bot_username}?start={file_hash}")]]
+            [[InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗡𝗢𝗪", url=f"https://t.me/{bot_username}?start={file_hash}")]]
         )
         await message.edit_reply_markup(markup)
     except Exception as e:

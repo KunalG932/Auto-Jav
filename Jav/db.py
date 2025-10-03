@@ -13,6 +13,7 @@ try:
     files = db.get_collection('files')
     worker = db.get_collection('worker')
     users = db.get_collection('users')
+    failed_downloads = db.get_collection('failed_downloads')
 except Exception as e:
     LOG.exception(f"Failed to connect to MongoDB: {e}")
     raise
@@ -89,3 +90,47 @@ def get_all_user_ids() -> list:
     except Exception as e:
         LOG.error(f"Error getting user IDs: {e}")
         return []
+
+def add_failed_download(title: str, magnet: str, reason: str = "Download failed") -> None:
+    """
+    Add a failed download record to prevent re-downloading.
+    """
+    from datetime import datetime
+    
+    try:
+        failed_downloads.insert_one({
+            'title': title,
+            'magnet': magnet,
+            'reason': reason,
+            'failed_at': datetime.now(),
+            'failed_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        LOG.info(f"❌ Marked as failed download: {title}")
+    except Exception as e:
+        LOG.error(f"Error adding failed download record: {e}")
+
+def is_failed_download(title: str) -> bool:
+    """
+    Check if a video has previously failed to download.
+    Returns True if it has failed before, False otherwise.
+    """
+    try:
+        existing = failed_downloads.find_one({'title': title})
+        if existing:
+            LOG.info(f"⚠️ Skipping previously failed download: {title}")
+            return True
+        return False
+    except Exception as e:
+        LOG.error(f"Error checking failed downloads: {e}")
+        return False
+
+def remove_failed_download(title: str) -> None:
+    """
+    Remove a title from failed downloads (in case you want to retry manually).
+    """
+    try:
+        result = failed_downloads.delete_one({'title': title})
+        if result.deleted_count > 0:
+            LOG.info(f"🔄 Removed from failed downloads: {title}")
+    except Exception as e:
+        LOG.error(f"Error removing failed download: {e}")

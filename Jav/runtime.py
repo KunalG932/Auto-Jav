@@ -8,7 +8,7 @@ from pyrogram.handlers.message_handler import MessageHandler
 from .config import SETTINGS
 from .clients import create_clients
 from .db import client as mongo_client, is_working, set_working
-from .handlers import alive_command, logs_command, status_command, start_command, stats_command, broadcast_command
+from .handlers import alive_command, logs_command, status_command, start_command, stats_command, broadcast_command, failed_command
 from .handlers.commands import set_clients
 from .processors import process_item, check_for_new_items
 from .api.api_health import warm_up_api
@@ -92,6 +92,7 @@ async def main():
             bot.add_handler(MessageHandler(status_command, filters.command("status") & owner_filter))
             bot.add_handler(MessageHandler(stats_command, filters.command("stats") & owner_filter))
             bot.add_handler(MessageHandler(broadcast_command, filters.command("broadcast") & owner_filter))
+            bot.add_handler(MessageHandler(failed_command, filters.command("failed") & owner_filter))
             bot.add_handler(MessageHandler(start_command, filters.command("start") & filters.private))
             
             if file_client:
@@ -101,6 +102,7 @@ async def main():
                     file_client.add_handler(MessageHandler(status_command, filters.command("status") & owner_filter))
                     file_client.add_handler(MessageHandler(stats_command, filters.command("stats") & owner_filter))
                     file_client.add_handler(MessageHandler(broadcast_command, filters.command("broadcast") & owner_filter))
+                    file_client.add_handler(MessageHandler(failed_command, filters.command("failed") & owner_filter))
                     file_client.add_handler(MessageHandler(start_command, filters.command("start") & filters.private))
                     LOG.info("✅ Command handlers registered on file client")
                 except Exception as e:
