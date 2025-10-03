@@ -53,7 +53,8 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
             if thumbnail_url and isinstance(thumbnail_url, str):
                 LOG.info(f"Downloading thumbnail from API: {thumbnail_url}")
                 
-                response = requests.get(thumbnail_url, timeout=15)
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+                response = requests.get(thumbnail_url, timeout=15, headers=headers)
                 response.raise_for_status()
                 
                 thumb_dir = "./thumbnails"

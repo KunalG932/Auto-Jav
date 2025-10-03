@@ -67,7 +67,7 @@ async def process_video_download(
         except Exception:
             pass
 
-    info = await loop.run_in_executor(None, download_torrent, magnet, _progress_cb)
+    info = await loop.run_in_executor(None, download_torrent, magnet, _progress_cb, title)
     
     LOG.info(f"Download executor returned: info={info}")
     if info:
@@ -93,10 +93,10 @@ async def process_video_download(
                     LOG.info(f"Starting FFEncoder encoding for: {upload_path}")
                     
                     from ..services.encode import FFEncoder
+                    from ..services.downloader import sanitize_filename
                     
-                    file_name = os.path.basename(upload_path)
-                    base_name, ext = os.path.splitext(file_name)
-                    output_name = f"{base_name}_encoded.mkv"
+                    # Use sanitized API title for encoded filename
+                    output_name = f"{sanitize_filename(title)}_encoded.mkv"
                     
                     encoder = FFEncoder(upload_path, output_name)
                     
@@ -168,10 +168,15 @@ async def process_video_download(
                 LOG.info("Starting post to main channel...")
                 await post_to_main_channel(bot_client, file_client, item, caption, file_hash, part_hashes, upload_path)
                 LOG.info(f"✅ Successfully uploaded and posted: {title}")
+                
+                # Cleanup all files after successful upload
+                await cleanup_files(info['file'], upload_path)
+                
+                # Also cleanup downloads and encode directories
+                await cleanup_directories()
             else:
                 LOG.error(f"❌ Upload failed for: {title}")
-            
-            await cleanup_files(info['file'], upload_path)
+                await cleanup_files(info['file'], upload_path)
             
         except Exception as upload_error:
             LOG.error(f"❌ Error during upload process for {title}: {upload_error}", exc_info=True)
@@ -412,7 +417,8 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
         import requests
         
         LOG.info(f"Downloading thumbnail from: {thumbnail_url}")
-        response = requests.get(thumbnail_url, timeout=15)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(thumbnail_url, timeout=15, headers=headers)
         response.raise_for_status()
         
         thumb_dir = "./thumbnails"
@@ -451,3 +457,31 @@ async def cleanup_files(original_file: str, processed_file: str):
             LOG.info(f"Cleaned up remuxed file: {processed_file}")
         except Exception as cleanup_error2:
             LOG.warning(f"Failed to cleanup remuxed file {processed_file}: {cleanup_error2}")
+
+async def cleanup_directories():
+    """
+    Cleanup downloads and encode directories after successful upload.
+    """
+    import shutil
+    
+    directories = ["./downloads", "./encode"]
+    
+    for directory in directories:
+        try:
+            if os.path.exists(directory):
+                # Remove all files in the directory
+                for filename in os.listdir(directory):
+                    file_path = os.path.join(directory, filename)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            LOG.info(f"🗑️ Deleted: {file_path}")
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                            LOG.info(f"🗑️ Deleted directory: {file_path}")
+                    except Exception as e:
+                        LOG.warning(f"Failed to delete {file_path}: {e}")
+                
+                LOG.info(f"✅ Cleaned up {directory} directory")
+        except Exception as e:
+            LOG.warning(f"Failed to cleanup {directory}: {e}")

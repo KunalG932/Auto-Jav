@@ -59,8 +59,19 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
     safe = f"{base}{ext}"
     return safe
 
-def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None) -> Optional[Dict[str, str]]:
+def download_torrent(
+    link: str, 
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    api_title: Optional[str] = None
+) -> Optional[Dict[str, str]]:
+    """
+    Download torrent and use API title for filename if provided.
     
+    Args:
+        link: Magnet link or torrent URL
+        progress_cb: Optional progress callback
+        api_title: Optional API title to use for the saved filename
+    """
     if not LIBTORRENT_AVAILABLE:
         LOG.error("libtorrent is not available. Cannot download torrents.")
         LOG.error("Please install Visual C++ Redistributables and run: pip install python-libtorrent")
@@ -142,7 +153,14 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
 
         torrent_name = handle.name()
         torrent_name = translate_to_english(torrent_name)
-        LOG.info(f"Starting download: {torrent_name}")
+        
+        # Use API title if provided (recommended for consistency)
+        if api_title:
+            display_name = api_title
+            LOG.info(f"Using API title for filename: {api_title}")
+        else:
+            display_name = torrent_name
+            LOG.info(f"Using torrent name: {torrent_name}")
 
         torrent_info = handle.torrent_file()
         files = torrent_info.files()
@@ -165,8 +183,8 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
         if largest_file:
             LOG.info(f"Largest video file: {largest_file} ({largest_size / (1024*1024):.2f} MB)")
         else:
-            LOG.warning(f"No video file found, using torrent name: {torrent_name}")
-            largest_file = torrent_name
+            LOG.warning(f"No video file found, using display name: {display_name}")
+            largest_file = display_name
 
         last_progress = 0.0
         stall_start: Optional[float] = None
@@ -207,9 +225,38 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
 
             time.sleep(SETTINGS.download_update_interval_sec)
 
-        safe_name = sanitize_filename(largest_file)
-        full_path = os.path.join(SAVE_PATH, largest_file)
+        # Get file extension from largest file
+        original_ext = os.path.splitext(largest_file)[1] or '.mp4'
+        
+        # Build the actual download path (where torrent saved the file)
+        original_torrent_path = os.path.join(SAVE_PATH, largest_file)
+        
+        # Use API title for the saved filename if provided
+        if api_title:
+            safe_name = sanitize_filename(api_title) + original_ext
+            target_path = os.path.join(SAVE_PATH, safe_name)
+            LOG.info(f"🏷️ Using API title: {safe_name}")
+        else:
+            safe_name = sanitize_filename(os.path.basename(largest_file))
+            target_path = os.path.join(SAVE_PATH, safe_name)
+            LOG.info(f"Using torrent filename: {safe_name}")
 
+        # Rename file if API title is provided and file exists
+        if api_title and os.path.exists(original_torrent_path) and original_torrent_path != target_path:
+            try:
+                LOG.info(f"🔄 Renaming file...")
+                LOG.info(f"   From: {os.path.basename(original_torrent_path)}")
+                LOG.info(f"   To: {safe_name}")
+                os.rename(original_torrent_path, target_path)
+                full_path = target_path
+                LOG.info(f"✅ File renamed successfully")
+            except Exception as rename_error:
+                LOG.warning(f"❌ Rename failed: {rename_error}, using original path")
+                full_path = original_torrent_path
+        else:
+            full_path = original_torrent_path
+
+        # If file doesn't exist at expected location, search for it
         if not os.path.exists(full_path):
             LOG.warning(f"File not found at expected path: {full_path}")
             LOG.info(f"Searching for video file in: {SAVE_PATH}")
@@ -230,32 +277,23 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
             
             if found_file:
                 LOG.info(f"Found video file: {found_file} ({found_size / (1024*1024):.2f} MB)")
-                full_path = found_file
-                safe_name = os.path.basename(found_file)
+                # Rename found file to API title if provided
+                if api_title:
+                    try:
+                        new_path = os.path.join(SAVE_PATH, safe_name)
+                        LOG.info(f"🔄 Renaming found file to API title: {safe_name}")
+                        os.rename(found_file, new_path)
+                        full_path = new_path
+                        LOG.info(f"✅ Found file renamed successfully")
+                    except Exception as e:
+                        LOG.warning(f"Failed to rename found file: {e}")
+                        full_path = found_file
+                else:
+                    full_path = found_file
             else:
                 LOG.error(f"No video file found in {SAVE_PATH}")
                 ses.remove_torrent(handle)
                 return None
-
-        target_path = os.path.join(SAVE_PATH, safe_name)
-        try:
-            if os.path.exists(full_path) and full_path != target_path:
-                if os.path.exists(target_path):
-                    base, ext = os.path.splitext(safe_name)
-                    idx = 1
-                    while True:
-                        candidate = f"{base}_{idx}{ext}"
-                        candidate_path = os.path.join(SAVE_PATH, candidate)
-                        if not os.path.exists(candidate_path):
-                            target_path = candidate_path
-                            break
-                        idx += 1
-
-                os.rename(full_path, target_path)
-                full_path = target_path
-
-        except Exception as e:
-            LOG.warning(f"Failed to sanitize/rename downloaded path {full_path} -> {target_path}: {e}")
 
         LOG.info(f"Download completed: {full_path}")
         if progress_cb:
@@ -271,7 +309,7 @@ def download_torrent(link: str, progress_cb: Optional[Callable[[Dict[str, Any]],
             except Exception:
                 pass
         
-        result = {"file": full_path, "name": torrent_name}
+        result = {"file": full_path, "name": display_name}
         LOG.info(f"Returning download result: {result}")
         return result
 
