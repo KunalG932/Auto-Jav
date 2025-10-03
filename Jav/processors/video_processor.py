@@ -326,38 +326,43 @@ async def post_to_main_channel(
         post_caption = create_enhanced_caption(title, item, video_path)
         LOG.info(f"Caption generated: {post_caption[:100]}...")
 
-        LOG.info("Downloading thumbnail...")
+        LOG.info("📥 Downloading thumbnail from API...")
         thumb_image = await generate_thumbnail(item)
-        LOG.info(f"Thumbnail result: {thumb_image}")
-
+        
         if thumb_image and os.path.exists(thumb_image):
-            LOG.info(f"Posting with thumbnail: {thumb_image}")
+            LOG.info(f"✅ Thumbnail ready: {thumb_image}")
             try:
-                main_msg = await bot_client.send_photo(SETTINGS.main_channel, thumb_image, caption=post_caption)
-                LOG.info("Successfully posted with thumbnail")
+                LOG.info(f"📤 Posting to main channel with thumbnail...")
+                main_msg = await bot_client.send_photo(
+                    SETTINGS.main_channel, 
+                    thumb_image, 
+                    caption=post_caption
+                )
+                LOG.info("✅ Successfully posted with thumbnail")
             except Exception as photo_error:
-                LOG.error(f"Failed to send photo, trying text message: {photo_error}")
+                LOG.error(f"❌ Failed to send photo: {photo_error}")
+                LOG.info("🔄 Trying text message instead...")
                 main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption)
         else:
-            LOG.warning("No thumbnail available, posting text only")
+            LOG.warning("⚠️ No thumbnail available, posting text only")
             main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption)
         
         try:
             if main_msg is not None:
-                sticker_id = "CAACAgUAAx0CfPp_PwABAX9taNZsQyInPz500GChLCk3uconkqwAAhESAALeIohXvOSc_GX-md4eBA"
+                sticker_id = SETTINGS.sticker_id
                 mid = getattr(main_msg, 'id', None)
                 
                 async def _send_sticker_async(sid, reply_id):
                     try:
                         await bot_client.send_sticker(SETTINGS.main_channel, sid, reply_to_message_id=reply_id)
+                        LOG.info("✅ Sticker sent successfully")
                     except Exception as e:
                         LOG.warning(f"Failed to send sticker: {e}")
-
-                asyncio.create_task(_send_sticker_async(sticker_id, mid))
+                
+                if mid:
+                    asyncio.create_task(_send_sticker_async(sticker_id, mid))
         except Exception:
-            pass
-        
-        try:
+            pass        try:
             if main_msg is not None:
                 if part_hashes and len(part_hashes) >= 2:
                     kb = InlineKeyboardMarkup([[
@@ -382,7 +387,10 @@ async def post_to_main_channel(
         LOG.error(f"Failed to post to main channel: {e}")
 
 async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
-    
+    """
+    Download thumbnail from API and return the local file path.
+    Returns None if download fails.
+    """
     thumbnail_url = item.get('thumbnail')
     if not thumbnail_url:
         LOG.warning("No thumbnail URL in item")
@@ -390,8 +398,8 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
     
     try:
         import requests
-        import tempfile
         
+        LOG.info(f"Downloading thumbnail from: {thumbnail_url}")
         response = requests.get(thumbnail_url, timeout=15)
         response.raise_for_status()
         
@@ -405,16 +413,16 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
                 ext = f'.{url_ext}'
         
         code = item.get('code', 'thumb')
-        thumb_path = os.path.join(thumb_dir, f"{code}{ext}")
+        thumb_path = os.path.join(thumb_dir, f"{code}_main{ext}")
         
         with open(thumb_path, 'wb') as f:
             f.write(response.content)
         
-        LOG.info(f"Downloaded thumbnail: {thumb_path}")
+        LOG.info(f"✅ Thumbnail downloaded successfully: {thumb_path}")
         return thumb_path
         
     except Exception as e:
-        LOG.error(f"Failed to download thumbnail from {thumbnail_url}: {e}")
+        LOG.error(f"❌ Failed to download thumbnail from {thumbnail_url}: {e}")
         return None
 
 async def cleanup_files(original_file: str, processed_file: str):
