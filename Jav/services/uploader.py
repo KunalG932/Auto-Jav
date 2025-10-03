@@ -8,29 +8,6 @@ from ..api.ai_caption import fetch_and_format, format_for_post
 
 LOG = logging.getLogger("Jav")
 
-def build_caption(item: Dict[str, Any]) -> str:
-    title = item.get('title') or 'Unknown Title'
-    parts = [f"🔸 {title}"]
-    
-    if code := item.get('code'):
-        parts.append(f"🔸 Code: {code}")
-    
-    if actresses := item.get('actresses'):
-        if isinstance(actresses, list) and actresses:
-            parts.append(f"🔸 Actresses: {', '.join(actresses)}")
-    
-    if tags := item.get('tags'):
-        if isinstance(tags, list) and tags:
-            parts.append(f"🔸 Tags: {', '.join(tags)}")
-    
-    if release_date := item.get('release_date'):
-        parts.append(f"🔸 Release Date: {release_date}")
-    
-    if description := item.get('description'):
-        parts.append(f"\n� {description}")
-    
-    return "\n".join(parts)
-
 def prepare_caption_content(item: Dict[str, Any]) -> str:
     title = item.get('title') or ''
     chunks = [title]
@@ -66,9 +43,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     if title:
         doc_caption = title
     else:
-        doc_caption = build_caption(item) if item else os.path.basename(abs_path)
-
-    if not title and not doc_caption:
         doc_caption = os.path.basename(abs_path)
 
     thumb_path = None

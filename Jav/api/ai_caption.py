@@ -165,30 +165,35 @@ def create_enhanced_caption(title: str, item: Dict[str, Any], video_path: Option
         try:
             code = item.get('code', '')
             title_text = item.get('title', title)
+            actresses = item.get('actresses', [])
+            tags = item.get('tags', [])
             
-            prompt = f"Title: {title_text}\nCode: {code}\nGenerate a short, enticing 2-3 sentence description."
+            actresses_str = ', '.join(actresses[:3]) if isinstance(actresses, list) and actresses else 'performers'
+            tags_str = ', '.join(tags[:5]) if isinstance(tags, list) and tags else 'exciting content'
             
-            ai_result = fetch_and_format(prompt, timeout=10)
-            if ai_result:
+            prompt = f"Create a seductive 2-3 sentence description for this adult video: Title: {title_text}, Code: {code}, Starring: {actresses_str}, Tags: {tags_str}. Make it enticing and flirty with emojis."
+            
+            ai_result = fetch_and_format(prompt, timeout=15)
+            if ai_result and len(ai_result.strip()) > 20:
                 description = ai_result
                 LOG.info("Generated description using AI")
             else:
-                description = "🔥 An absolutely captivating experience that will leave you wanting more! Don't miss this masterpiece! 💯"
-                LOG.info("Using default fallback description")
+                description = f"🔥 An absolutely captivating experience featuring {actresses_str} that will leave you wanting more! Don't miss this masterpiece! 💯✨"
+                LOG.info("Using enhanced fallback description")
         except Exception as e:
             LOG.warning(f"Failed to generate AI description: {e}")
             description = "🔥 An absolutely captivating experience that will leave you wanting more! Don't miss this masterpiece! 💯"
     
     caption_parts = [
-        f"📺 {title}",
-        f"➪ Episode:- 01 [{duration}]",
-        f"➪ Subtitle:- English✅",
-        f"➪ Rating:- {rating}/10",
-        f"#{recommendation}",
+        f"**📺 {title}**",
+        f"**➪ Episode:-** _01 [{duration}]_",
+        f"**➪ Subtitle:-** _English✅_",
+        f"**➪ Rating:-** __{rating}/10__",
+        f"**#{recommendation}**",
         "",
-        description,
+        f"> {description}",
         "",
-        "ᴘᴏᴡᴇʀᴇᴅ ʙʏ: @The_Wyverns"
+        "_ᴘᴏᴡᴇʀᴇᴅ ʙʏ: @The_Wyverns_"
     ]
     
     return "\n".join(caption_parts)

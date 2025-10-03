@@ -319,13 +319,25 @@ async def post_to_main_channel(
         bot_username = getattr(bot_user, 'username', '') or ''
 
         title = item.get('title', 'Video')
+        
+        LOG.info("Generating enhanced caption with AI...")
         post_caption = create_enhanced_caption(title, item, video_path)
+        LOG.info(f"Caption generated: {post_caption[:100]}...")
 
+        LOG.info("Downloading thumbnail...")
         thumb_image = await generate_thumbnail(item)
+        LOG.info(f"Thumbnail result: {thumb_image}")
 
         if thumb_image and os.path.exists(thumb_image):
-            main_msg = await bot_client.send_photo(SETTINGS.main_channel, thumb_image, caption=post_caption)
+            LOG.info(f"Posting with thumbnail: {thumb_image}")
+            try:
+                main_msg = await bot_client.send_photo(SETTINGS.main_channel, thumb_image, caption=post_caption)
+                LOG.info("Successfully posted with thumbnail")
+            except Exception as photo_error:
+                LOG.error(f"Failed to send photo, trying text message: {photo_error}")
+                main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption)
         else:
+            LOG.warning("No thumbnail available, posting text only")
             main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption)
         
         try:

@@ -4,11 +4,41 @@ from typing import List, Dict, Any, Optional
 import time
 import requests
 from ..config import SETTINGS
+from ..utils import translate_to_english
 
 LOG = logging.getLogger("Jav")
 
-def sha1(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()
+def translate_item_fields(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Translate specific fields in item to English if they contain non-English text."""
+    try:
+        if 'title' in item and item['title']:
+            translated_title = translate_to_english(str(item['title']))
+            if translated_title and translated_title != str(item['title']):
+                LOG.info(f"Translated title: {item['title'][:50]} -> {translated_title[:50]}")
+                item['title'] = translated_title
+        
+        if 'description' in item and item['description']:
+            translated_desc = translate_to_english(str(item['description']))
+            if translated_desc and translated_desc != str(item['description']):
+                LOG.info("Translated description")
+                item['description'] = translated_desc
+        
+        if 'tags' in item and isinstance(item['tags'], list):
+            translated_tags = []
+            for tag in item['tags']:
+                if isinstance(tag, str) and tag:
+                    translated_tag = translate_to_english(tag)
+                    translated_tags.append(translated_tag if translated_tag else tag)
+                else:
+                    translated_tags.append(tag)
+            item['tags'] = translated_tags
+    except Exception as e:
+        LOG.warning(f"Translation error for item fields: {e}")
+    
+    return item
+
+def sha1(s: str) -> str:
+    return hashlib.sha1(s.encode("utf-8", errors="ignore")).hexdigest()
 
 def fetch_jav() -> Optional[List[Dict[str, Any]]]:
     last_err: Optional[Exception] = None
@@ -63,7 +93,18 @@ def fetch_jav() -> Optional[List[Dict[str, Any]]]:
         return None
 
     LOG.info(f"Fetched {len(data)} items from API")
-    return data
+    
+    # Translate items to English
+    try:
+        translated_data = []
+        for item in data:
+            translated_item = translate_item_fields(item)
+            translated_data.append(translated_item)
+        LOG.info(f"Translated {len(translated_data)} items")
+        return translated_data
+    except Exception as e:
+        LOG.warning(f"Translation process failed, returning untranslated data: {e}")
+        return data
 
 def get_title(item: Dict[str, Any]) -> str:
     return item.get("title") or ""

@@ -7,7 +7,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from ..config import SETTINGS
 from ..db import get_file_by_hash, add_file_record
 from ..api.feed import get_title, sha1
-from ..services.uploader import build_caption, prepare_caption_content, add_download_button
+from ..services.uploader import prepare_caption_content, add_download_button
 from ..api.ai_caption import fetch_and_format, format_for_post
 from ..utils import generate_hash
 from .video_processor import process_video_download
@@ -21,7 +21,6 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
         return
 
     title = get_title(item) or 'Unknown Title'
-    caption = build_caption(item)
     
     try:
         item_hash = sha1(title)
@@ -72,7 +71,7 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
             try:
                 LOG.info(f"🎬 Starting download process for: {title}")
                 uploaded, msg = await process_video_download(
-                    bot_client, file_client, item, title, caption, magnet
+                    bot_client, file_client, item, title, title, magnet
                 )
                 LOG.info(f"📤 Download process completed: uploaded={uploaded}, title={title}")
             except Exception as download_error:
@@ -80,7 +79,7 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
     else:
         LOG.info(f"No magnet link for {title}, posting with API thumbnail")
         try:
-            uploaded = await post_without_file(bot_client, item, caption, torrent_links)
+            uploaded = await post_without_file(bot_client, item, title, torrent_links)
         except Exception as e:
             LOG.error(f"Failed to post to main channel without file: {e}")
     
@@ -99,28 +98,67 @@ async def post_without_file(bot_client: Client, item: Dict[str, Any], caption: s
     
     ai_caption = None
     try:
+        LOG.info("Generating AI caption for post without file...")
         payload = prepare_caption_content(item) if item else ''
         loop = asyncio.get_event_loop()
         try:
             ai_caption = await asyncio.wait_for(
-                loop.run_in_executor(None, fetch_and_format, payload, 8),
-                timeout=12,
+                loop.run_in_executor(None, fetch_and_format, payload, 15),
+                timeout=20,
             )
-        except Exception:
+            if ai_caption:
+                LOG.info(f"AI caption generated: {ai_caption[:100]}...")
+        except asyncio.TimeoutError:
+            LOG.warning("AI caption generation timed out")
             ai_caption = None
-    except Exception:
+        except Exception as e:
+            LOG.warning(f"AI caption generation failed: {e}")
+            ai_caption = None
+    except Exception as e:
+        LOG.error(f"Error in AI caption generation: {e}")
         ai_caption = None
 
-    if ai_caption and isinstance(ai_caption, str):
+    if ai_caption and isinstance(ai_caption, str) and len(ai_caption.strip()) > 20:
         try:
             formatted = format_for_post(ai_caption)
             post_caption = formatted if formatted else ai_caption
-        except Exception:
+            LOG.info("Using AI-generated caption")
+        except Exception as e:
+            LOG.warning(f"Failed to format AI caption: {e}")
             post_caption = ai_caption
     else:
+        LOG.info("Using default caption (AI caption not available)")
         post_caption = caption
 
-    api_thumbnail = item.get('thumbnail')
+    api_thumbnail_url = item.get('thumbnail')
+    thumbnail_file = None
+    
+    if api_thumbnail_url:
+        try:
+            import requests
+            LOG.info(f"Downloading thumbnail from: {api_thumbnail_url}")
+            response = requests.get(api_thumbnail_url, timeout=15)
+            response.raise_for_status()
+            
+            thumb_dir = "./thumbnails"
+            os.makedirs(thumb_dir, exist_ok=True)
+            
+            ext = '.jpg'
+            if '.' in api_thumbnail_url:
+                url_ext = api_thumbnail_url.split('.')[-1].split('?')[0].lower()
+                if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
+                    ext = f'.{url_ext}'
+            
+            code = item.get('code', 'thumb_no_file')
+            thumbnail_file = os.path.join(thumb_dir, f"{code}{ext}")
+            
+            with open(thumbnail_file, 'wb') as f:
+                f.write(response.content)
+            
+            LOG.info(f"Thumbnail downloaded successfully: {thumbnail_file}")
+        except Exception as e:
+            LOG.warning(f"Failed to download thumbnail: {e}")
+            thumbnail_file = None
     
     buttons = []
     if torrent_links:
@@ -137,23 +175,26 @@ async def post_without_file(bot_client: Client, item: Dict[str, Any], caption: s
     
     kb = InlineKeyboardMarkup(buttons) if buttons else None
 
-    if api_thumbnail:
+    if thumbnail_file and os.path.exists(thumbnail_file):
         try:
+            LOG.info(f"Sending photo with thumbnail: {thumbnail_file}")
             if kb:
                 main_msg = await bot_client.send_photo(
-                    SETTINGS.main_channel, api_thumbnail, caption=post_caption, reply_markup=kb
+                    SETTINGS.main_channel, thumbnail_file, caption=post_caption, reply_markup=kb
                 )
             else:
                 main_msg = await bot_client.send_photo(
-                    SETTINGS.main_channel, api_thumbnail, caption=post_caption
+                    SETTINGS.main_channel, thumbnail_file, caption=post_caption
                 )
+            LOG.info("Photo sent successfully with thumbnail")
         except Exception as e:
-            LOG.warning(f"Failed to send photo with API thumbnail: {e}, falling back to text")
+            LOG.warning(f"Failed to send photo with downloaded thumbnail: {e}, falling back to text")
             if kb:
                 main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption, reply_markup=kb)
             else:
                 main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption)
     else:
+        LOG.info("No thumbnail available, sending text message")
         if kb:
             main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption, reply_markup=kb)
         else:

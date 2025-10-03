@@ -54,4 +54,6 @@ class Settings:
     encode_audio_codec: str = os.getenv("ENCODE_AUDIO_CODEC", "aac")
     encode_audio_bitrate: str = os.getenv("ENCODE_AUDIO_BITRATE", "128k")
 
+    sticker_id: str = os.getenv("STICKER_ID", "CAACAgUAAx0CfPp_PwABAX9taNZsQyInPz500GChLCk3uconkqwAAhESAALeIohXvOSc_GX-md4eBA")
+
 SETTINGS = Settings()
