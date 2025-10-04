@@ -8,7 +8,7 @@ LOG = logging.getLogger("Jav")
 
 try:
     client = MongoClient(SETTINGS.mongo_uri, server_api=ServerApi('1'))
-    db = client.get_database('naaanoqswbotdb')
+    db = client.get_database('naaanxcvoqswbotdb')
     last_added = db.get_collection('lasqt_added')
     files = db.get_collection('files')
     worker = db.get_collection('worker')
