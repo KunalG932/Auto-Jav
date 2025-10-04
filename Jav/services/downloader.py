@@ -45,12 +45,12 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
     return safe
 
 
-async def download_torrent_async(
+def download_torrent(
     link: str,
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None
 ) -> Optional[Dict[str, str]]:
     """
-    Download torrent using torrentp (async, fast, and easy).
+    Download torrent using torrentp (fast and easy).
     
     Args:
         link: Magnet link or torrent URL
@@ -59,75 +59,23 @@ async def download_torrent_async(
     Returns:
         Dict with 'file' and 'name' keys, or None if failed
     """
-    torrent_file = None
     start_time = time.time()
     
     try:
         os.makedirs(SAVE_PATH, exist_ok=True)
         
-        LOG.info(f"🚀 Starting fast torrent download with torrentp")
+        LOG.info(f"🚀 Starting torrent download with torrentp")
         LOG.info(f"📍 Download path: {SAVE_PATH}")
         
         # Create torrent downloader
-        torrent_file = TorrentDownloader(link, SAVE_PATH)
+        torrent_downloader = TorrentDownloader(link, SAVE_PATH)
         
-        # Start download
-        LOG.info("⬇️ Starting download...")
-        torrent_file.start_download()
+        LOG.info("⬇️ Downloading torrent (this may take a while)...")
         
-        # Monitor progress
-        last_progress = -1
-        stall_count = 0
-        max_stall = 60  # 60 checks (2 seconds each = 2 minutes) of no progress
-        check_interval = 2  # Check every 2 seconds
-        
-        while not torrent_file.is_complete():
-            await asyncio.sleep(check_interval)
-            
-            try:
-                # Get download stats
-                progress = torrent_file.get_download_percentage()
-                
-                # Log progress every 10%
-                if progress >= last_progress + 10 or (progress > 0 and last_progress < 0):
-                    LOG.info(f"📊 Download Progress: {progress:.1f}%")
-                    last_progress = progress
-                
-                # Call progress callback
-                if progress_cb:
-                    try:
-                        elapsed = time.time() - start_time
-                        progress_cb({
-                            "stage": "downloading",
-                            "progress_pct": float(progress),
-                            "peers": 0.0,
-                            "down_rate_kbs": 0.0,
-                            "up_rate_kbs": 0.0,
-                            "elapsed": float(elapsed)
-                        })
-                    except Exception:
-                        pass
-                
-                # Check for stalls (no progress)
-                if progress <= last_progress and last_progress >= 0:
-                    stall_count += 1
-                    if stall_count > max_stall:
-                        LOG.error("❌ Download stalled (no progress for too long)")
-                        torrent_file.stop_download()
-                        return None
-                else:
-                    stall_count = 0
-                    
-            except Exception as e:
-                LOG.warning(f"Progress check error: {e}")
+        # Start download (this blocks until complete)
+        torrent_downloader.start_download()
         
         LOG.info("✅ Download complete!")
-        
-        # Stop the download session
-        try:
-            torrent_file.stop_download()
-        except Exception:
-            pass
         
         # Find downloaded video file
         video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
@@ -185,44 +133,8 @@ async def download_torrent_async(
         
     except KeyboardInterrupt:
         LOG.info("⚠️ Download cancelled by user")
-        if torrent_file:
-            try:
-                torrent_file.stop_download()
-            except Exception:
-                pass
         return None
         
     except Exception as e:
         LOG.error(f"❌ Download error: {e}", exc_info=True)
-        if torrent_file:
-            try:
-                torrent_file.stop_download()
-            except Exception:
-                pass
-        return None
-
-
-def download_torrent(
-    link: str,
-    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None
-) -> Optional[Dict[str, str]]:
-    """
-    Synchronous wrapper for async torrent download using torrentp.
-    
-    Args:
-        link: Magnet link or torrent URL
-        progress_cb: Optional progress callback
-        
-    Returns:
-        Dict with 'file' and 'name' keys, or None if failed
-    """
-    try:
-        # Run async download in sync context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(download_torrent_async(link, progress_cb))
-        loop.close()
-        return result
-    except Exception as e:
-        LOG.error(f"❌ Sync download wrapper error: {e}")
         return None
