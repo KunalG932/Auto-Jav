@@ -409,6 +409,11 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
     Returns None if download fails.
     """
     thumbnail_url = item.get('thumbnail')
+    
+    LOG.info(f"🔍 DEBUG generate_thumbnail - Item keys: {list(item.keys())}")
+    LOG.info(f"🔍 DEBUG generate_thumbnail - Thumbnail URL: {thumbnail_url}")
+    LOG.info(f"🔍 DEBUG generate_thumbnail - Thumbnail type: {type(thumbnail_url)}")
+    
     if not thumbnail_url:
         LOG.warning("No thumbnail URL in item")
         return None

@@ -22,6 +22,12 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
 
     title = get_title(item) or 'Unknown Title'
     
+    # Debug: Log the full item structure to see what API returns
+    LOG.info(f"🔍 DEBUG - Processing item: {title}")
+    LOG.info(f"🔍 DEBUG - Item keys: {list(item.keys())}")
+    LOG.info(f"🔍 DEBUG - Thumbnail in item: {item.get('thumbnail')}")
+    LOG.info(f"🔍 DEBUG - Full item data: {item}")
+    
     # Check if this download has failed before
     if is_failed_download(title):
         LOG.info(f"⏭️ Skipping previously failed download: {title}")
@@ -154,11 +160,15 @@ async def post_without_file(bot_client: Client, item: Dict[str, Any], caption: s
     api_thumbnail_url = item.get('thumbnail')
     thumbnail_file = None
     
+    LOG.info(f"🔍 DEBUG - API thumbnail URL from item: {api_thumbnail_url}")
+    LOG.info(f"🔍 DEBUG - API thumbnail URL type: {type(api_thumbnail_url)}")
+    
     if api_thumbnail_url:
         try:
             import requests
             LOG.info(f"Downloading thumbnail from: {api_thumbnail_url}")
-            response = requests.get(api_thumbnail_url, timeout=15)
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            response = requests.get(api_thumbnail_url, timeout=15, headers=headers)
             response.raise_for_status()
             
             thumb_dir = "./thumbnails"
