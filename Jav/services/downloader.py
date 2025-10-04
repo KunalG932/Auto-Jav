@@ -1,29 +1,12 @@
 import os
-import time
 import re
 import unicodedata
 import logging
-import tempfile
+import asyncio
+import time
 from typing import Optional, Dict, Callable, Any
+from torrentp import TorrentDownloader
 
-try:
-    import libtorrent as lt
-    LIBTORRENT_AVAILABLE = True
-except ImportError as e:
-    LIBTORRENT_AVAILABLE = False
-    lt = None
-    print("\n" + "="*80)
-    print("WARNING: libtorrent could not be imported!")
-    print("="*80)
-    print("Error:", str(e))
-    print("\nTo fix this on Windows:")
-    print("1. Install Visual C++ Redistributables:")
-    print("   - Download: https://aka.ms/vs/17/release/vc_redist.x64.exe")
-    print("   - Install both x64 and x86 versions")
-    print("2. Then run: pip install python-libtorrent")
-    print("="*80 + "\n")
-
-import requests
 from ..config import SETTINGS
 from ..utils import translate_to_english
 
@@ -32,7 +15,9 @@ LOG = logging.getLogger("Jav")
 SAVE_PATH = os.path.abspath("./downloads")
 
 def sanitize_filename(name: str, max_length: int = 200) -> str:
-    
+    """
+    Sanitize filename to remove invalid characters and limit length.
+    """
     if not name:
         return "unnamed"
 
@@ -59,260 +44,185 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
     safe = f"{base}{ext}"
     return safe
 
-def download_torrent(
-    link: str, 
-    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
-    api_title: Optional[str] = None
+
+async def download_torrent_async(
+    link: str,
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None
 ) -> Optional[Dict[str, str]]:
     """
-    Download torrent and use API title for filename if provided.
+    Download torrent using torrentp (async, fast, and easy).
     
     Args:
         link: Magnet link or torrent URL
         progress_cb: Optional progress callback
-        api_title: Optional API title to use for the saved filename
+        
+    Returns:
+        Dict with 'file' and 'name' keys, or None if failed
     """
-    if not LIBTORRENT_AVAILABLE:
-        LOG.error("libtorrent is not available. Cannot download torrents.")
-        LOG.error("Please install Visual C++ Redistributables and run: pip install python-libtorrent")
-        return None
+    torrent_file = None
+    start_time = time.time()
     
     try:
         os.makedirs(SAVE_PATH, exist_ok=True)
-
-        ses = lt.session()
-        ses.listen_on(6881, 6891)
-        try:
-            ses.start_dht()
-            ses.start_lsd()
-            ses.start_upnp()
-        except Exception as e:
-            LOG.warning(f"Peer discovery services could not start: {e}")
-
-        params = {"save_path": SAVE_PATH}
-        handle = None
-
-        if link.startswith('magnet:'):
-            handle = lt.add_magnet_uri(ses, link, params)
-            LOG.info("Using magnet link")
-        else:
-            LOG.info(f"Downloading torrent file from: {link}")
+        
+        LOG.info(f"🚀 Starting fast torrent download with torrentp")
+        LOG.info(f"📍 Download path: {SAVE_PATH}")
+        
+        # Create torrent downloader
+        torrent_file = TorrentDownloader(link, SAVE_PATH)
+        
+        # Start download
+        LOG.info("⬇️ Starting download...")
+        torrent_file.start_download()
+        
+        # Monitor progress
+        last_progress = -1
+        stall_count = 0
+        max_stall = 60  # 60 checks (2 seconds each = 2 minutes) of no progress
+        check_interval = 2  # Check every 2 seconds
+        
+        while not torrent_file.is_complete():
+            await asyncio.sleep(check_interval)
+            
             try:
-                response = requests.get(link, timeout=30)
-                response.raise_for_status()
-                torrent_data = response.content
+                # Get download stats
+                progress = torrent_file.get_download_percentage()
                 
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.torrent') as tmp_file:
-                    tmp_file.write(torrent_data)
-                    tmp_path = tmp_file.name
+                # Log progress every 10%
+                if progress >= last_progress + 10 or (progress > 0 and last_progress < 0):
+                    LOG.info(f"📊 Download Progress: {progress:.1f}%")
+                    last_progress = progress
                 
-                with open(tmp_path, 'rb') as f:
-                    torrent_info = lt.torrent_info(f)
-                    params['ti'] = torrent_info
-                    handle = ses.add_torrent(params)
-                
-                os.unlink(tmp_path)
-                LOG.info("Using torrent file")
-                
-            except Exception as e:
-                LOG.error(f"Failed to download torrent file: {e}")
-                return None
-
-        if handle is None:
-            LOG.error("Failed to create torrent handle")
-            return None
-
-        LOG.info("Waiting for torrent metadata...")
-        start_time = time.time()
-        last_log = 0
-
-        while not handle.has_metadata():
-            elapsed = time.time() - start_time
-            if elapsed - last_log >= 5:
-                st = handle.status()
-                LOG.info(f"Metadata wait: peers={st.num_peers}, down={st.download_rate/1000:.1f} kB/s, elapsed={int(elapsed)}s")
+                # Call progress callback
                 if progress_cb:
                     try:
+                        elapsed = time.time() - start_time
                         progress_cb({
-                            "stage": "metadata",
-                            "elapsed": float(int(elapsed)),
-                            "peers": float(st.num_peers),
-                            "down_rate_kbs": float(st.download_rate/1000.0),
-                            "progress_pct": 0.0,
+                            "stage": "downloading",
+                            "progress_pct": float(progress),
+                            "peers": 0.0,
+                            "down_rate_kbs": 0.0,
+                            "up_rate_kbs": 0.0,
+                            "elapsed": float(elapsed)
                         })
                     except Exception:
                         pass
-                last_log = elapsed
-            if elapsed >= SETTINGS.torrent_metadata_timeout_sec:
-                st = handle.status()
-                reason = "No peers found" if st.num_peers == 0 else "Timeout"
-                LOG.error(f"Metadata timeout after {int(elapsed)}s - {reason} (peers: {st.num_peers})")
-                ses.remove_torrent(handle)
-                return None
-            time.sleep(1)
-
-        torrent_name = handle.name()
-        torrent_name = translate_to_english(torrent_name)
-        
-        # Use API title if provided (recommended for consistency)
-        if api_title:
-            display_name = api_title
-            LOG.info(f"Using API title for filename: {api_title}")
-        else:
-            display_name = torrent_name
-            LOG.info(f"Using torrent name: {torrent_name}")
-
-        torrent_info = handle.torrent_file()
-        files = torrent_info.files()
-        
-        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
-        largest_file = None
-        largest_size = 0
-        largest_idx = 0
-        
-        for i in range(files.num_files()):
-            file_path = files.file_path(i)
-            file_size = files.file_size(i)
-            file_ext = os.path.splitext(file_path)[1].lower()
-            
-            if file_ext in video_extensions and file_size > largest_size:
-                largest_file = file_path
-                largest_size = file_size
-                largest_idx = i
-        
-        if largest_file:
-            LOG.info(f"Largest video file: {largest_file} ({largest_size / (1024*1024):.2f} MB)")
-        else:
-            LOG.warning(f"No video file found, using display name: {display_name}")
-            largest_file = display_name
-
-        last_progress = 0.0
-        stall_start: Optional[float] = None
-
-        while handle.status().state != lt.torrent_status.seeding:
-            s = handle.status()
-            prog = s.progress
-            down_rate = s.download_rate
-            up_rate = s.upload_rate
-
-            LOG.info(f"{prog*100:.2f}% down:{down_rate/1000:.1f} kB/s up:{up_rate/1000:.1f} kB/s peers:{s.num_peers}")
-            if progress_cb:
-                try:
-                    progress_cb({
-                        "stage": "downloading",
-                        "elapsed": float(int(time.time() - start_time)),
-                        "peers": float(s.num_peers),
-                        "down_rate_kbs": float(down_rate/1000.0),
-                        "up_rate_kbs": float(up_rate/1000.0),
-                        "progress_pct": float(prog * 100.0),
-                    })
-                except Exception:
-                    pass
-
-            if prog > last_progress:
-                last_progress = prog
-                stall_start = None
-            else:
-                if down_rate < 1024:
-                    if stall_start is None:
-                        stall_start = time.time()
-                    elif time.time() - stall_start >= SETTINGS.torrent_stall_timeout_sec:
-                        LOG.error("Download stalled; aborting")
-                        ses.remove_torrent(handle)
+                
+                # Check for stalls (no progress)
+                if progress <= last_progress and last_progress >= 0:
+                    stall_count += 1
+                    if stall_count > max_stall:
+                        LOG.error("❌ Download stalled (no progress for too long)")
+                        torrent_file.stop_download()
                         return None
                 else:
-                    stall_start = None
-
-            time.sleep(SETTINGS.download_update_interval_sec)
-
-        # Get file extension from largest file
-        original_ext = os.path.splitext(largest_file)[1] or '.mp4'
+                    stall_count = 0
+                    
+            except Exception as e:
+                LOG.warning(f"Progress check error: {e}")
         
-        # Build the actual download path (where torrent saved the file)
-        original_torrent_path = os.path.join(SAVE_PATH, largest_file)
+        LOG.info("✅ Download complete!")
         
-        # Use API title for the saved filename if provided
-        if api_title:
-            safe_name = sanitize_filename(api_title) + original_ext
-            target_path = os.path.join(SAVE_PATH, safe_name)
-            LOG.info(f"🏷️ Using API title: {safe_name}")
-        else:
-            safe_name = sanitize_filename(os.path.basename(largest_file))
-            target_path = os.path.join(SAVE_PATH, safe_name)
-            LOG.info(f"Using torrent filename: {safe_name}")
-
-        # Rename file if API title is provided and file exists
-        if api_title and os.path.exists(original_torrent_path) and original_torrent_path != target_path:
-            try:
-                LOG.info(f"🔄 Renaming file...")
-                LOG.info(f"   From: {os.path.basename(original_torrent_path)}")
-                LOG.info(f"   To: {safe_name}")
-                os.rename(original_torrent_path, target_path)
-                full_path = target_path
-                LOG.info(f"✅ File renamed successfully")
-            except Exception as rename_error:
-                LOG.warning(f"❌ Rename failed: {rename_error}, using original path")
-                full_path = original_torrent_path
-        else:
-            full_path = original_torrent_path
-
-        # If file doesn't exist at expected location, search for it
-        if not os.path.exists(full_path):
-            LOG.warning(f"File not found at expected path: {full_path}")
-            LOG.info(f"Searching for video file in: {SAVE_PATH}")
-            
-            found_file = None
-            found_size = 0
-            video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
-            
-            for root, dirs, files in os.walk(SAVE_PATH):
-                for file in files:
-                    file_ext = os.path.splitext(file)[1].lower()
-                    if file_ext in video_extensions:
-                        file_path = os.path.join(root, file)
+        # Stop the download session
+        try:
+            torrent_file.stop_download()
+        except Exception:
+            pass
+        
+        # Find downloaded video file
+        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v']
+        
+        # Search for video files in download directory
+        found_file = None
+        found_size = 0
+        
+        LOG.info(f"🔍 Searching for video files in: {SAVE_PATH}")
+        for root, dirs, files in os.walk(SAVE_PATH):
+            for file in files:
+                file_ext = os.path.splitext(file)[1].lower()
+                if file_ext in video_extensions:
+                    file_path = os.path.join(root, file)
+                    try:
                         file_size = os.path.getsize(file_path)
                         if file_size > found_size:
                             found_file = file_path
                             found_size = file_size
-            
-            if found_file:
-                LOG.info(f"Found video file: {found_file} ({found_size / (1024*1024):.2f} MB)")
-                # Rename found file to API title if provided
-                if api_title:
-                    try:
-                        new_path = os.path.join(SAVE_PATH, safe_name)
-                        LOG.info(f"🔄 Renaming found file to API title: {safe_name}")
-                        os.rename(found_file, new_path)
-                        full_path = new_path
-                        LOG.info(f"✅ Found file renamed successfully")
                     except Exception as e:
-                        LOG.warning(f"Failed to rename found file: {e}")
-                        full_path = found_file
-                else:
-                    full_path = found_file
-            else:
-                LOG.error(f"No video file found in {SAVE_PATH}")
-                ses.remove_torrent(handle)
-                return None
-
-        LOG.info(f"Download completed: {full_path}")
+                        LOG.warning(f"Could not get size of {file_path}: {e}")
+        
+        if not found_file:
+            LOG.error("❌ No video file found after download")
+            return None
+        
+        # Get torrent name and translate
+        torrent_name = os.path.splitext(os.path.basename(found_file))[0]
+        torrent_name = translate_to_english(torrent_name)
+        
+        file_size_mb = found_size / (1024 * 1024)
+        LOG.info(f"📁 Found video: {os.path.basename(found_file)}")
+        LOG.info(f"📏 Size: {file_size_mb:.1f} MB")
+        LOG.info(f"🏷️ Name: {torrent_name}")
+        
+        # Call completion callback
         if progress_cb:
             try:
+                elapsed = time.time() - start_time
                 progress_cb({
                     "stage": "completed",
-                    "elapsed": float(int(time.time() - start_time)),
+                    "progress_pct": 100.0,
                     "peers": 0.0,
                     "down_rate_kbs": 0.0,
                     "up_rate_kbs": 0.0,
-                    "progress_pct": 100.0,
+                    "elapsed": float(elapsed)
                 })
             except Exception:
                 pass
         
-        result = {"file": full_path, "name": display_name}
-        LOG.info(f"Returning download result: {result}")
-        return result
-
+        return {
+            'file': found_file,
+            'name': torrent_name
+        }
+        
+    except KeyboardInterrupt:
+        LOG.info("⚠️ Download cancelled by user")
+        if torrent_file:
+            try:
+                torrent_file.stop_download()
+            except Exception:
+                pass
+        return None
+        
     except Exception as e:
-        LOG.exception(f"download_torrent error: {e}")
+        LOG.error(f"❌ Download error: {e}", exc_info=True)
+        if torrent_file:
+            try:
+                torrent_file.stop_download()
+            except Exception:
+                pass
+        return None
+
+
+def download_torrent(
+    link: str,
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None
+) -> Optional[Dict[str, str]]:
+    """
+    Synchronous wrapper for async torrent download using torrentp.
+    
+    Args:
+        link: Magnet link or torrent URL
+        progress_cb: Optional progress callback
+        
+    Returns:
+        Dict with 'file' and 'name' keys, or None if failed
+    """
+    try:
+        # Run async download in sync context
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(download_torrent_async(link, progress_cb))
+        loop.close()
+        return result
+    except Exception as e:
+        LOG.error(f"❌ Sync download wrapper error: {e}")
         return None
