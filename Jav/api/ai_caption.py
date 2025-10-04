@@ -109,6 +109,7 @@ def fetch_and_format(content: str, timeout: int = 8) -> Optional[str]:
 def get_video_duration(file_path: str) -> Optional[str]:
     
     if not os.path.exists(file_path):
+        LOG.warning(f"❌ Video file does not exist: {file_path}")
         return None
     
     try:
@@ -119,7 +120,9 @@ def get_video_duration(file_path: str) -> Optional[str]:
             '-of', 'default=noprint_wrappers=1:nokey=1',
             file_path
         ]
+        LOG.info(f"Running ffprobe command: {' '.join(cmd[:4])}...")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
         if result.returncode == 0 and result.stdout.strip():
             duration_sec = float(result.stdout.strip())
             hours = int(duration_sec // 3600)
@@ -127,21 +130,36 @@ def get_video_duration(file_path: str) -> Optional[str]:
             seconds = int(duration_sec % 60)
             
             if hours > 0:
-                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
             else:
-                return f"{minutes:02d}:{seconds:02d}"
+                formatted = f"{minutes:02d}:{seconds:02d}"
+            
+            LOG.info(f"✅ Duration extracted: {formatted} ({duration_sec:.1f}s)")
+            return formatted
+        else:
+            LOG.warning(f"⚠️ ffprobe returned code {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}")
     except Exception as e:
-        LOG.warning(f"Failed to get video duration: {e}")
+        LOG.error(f"❌ Failed to get video duration: {e}", exc_info=True)
     
     return None
 
 def create_enhanced_caption(title: str, item: Dict[str, Any], video_path: Optional[str] = None) -> str:
     
     duration = "Unknown"
-    if video_path and os.path.exists(video_path):
-        video_duration = get_video_duration(video_path)
-        if video_duration:
-            duration = video_duration
+    if video_path:
+        LOG.info(f"Attempting to get duration for video: {video_path}")
+        if os.path.exists(video_path):
+            LOG.info(f"Video file exists, extracting duration...")
+            video_duration = get_video_duration(video_path)
+            if video_duration:
+                duration = video_duration
+                LOG.info(f"✅ Duration extracted: {duration}")
+            else:
+                LOG.warning(f"⚠️ Failed to extract duration from video")
+        else:
+            LOG.warning(f"⚠️ Video file does not exist: {video_path}")
+    else:
+        LOG.warning("⚠️ No video_path provided to create_enhanced_caption")
     
     rating = round(random.uniform(7.5, 9.9), 1)
     
@@ -160,41 +178,46 @@ def create_enhanced_caption(title: str, item: Dict[str, Any], video_path: Option
     api_description = item.get('description', '').strip()
     if api_description:
         description = api_description
-        LOG.info("Using description from API")
+        LOG.info("✅ Using description from API")
     else:
+        LOG.info("🤖 No API description, generating AI description...")
         try:
             code = item.get('code', '')
             title_text = item.get('title', title)
             actresses = item.get('actresses', [])
             tags = item.get('tags', [])
             
-            actresses_str = ', '.join(actresses[:3]) if isinstance(actresses, list) and actresses else 'performers'
+            actresses_str = ', '.join(actresses[:3]) if isinstance(actresses, list) and actresses else 'stunning performers'
             tags_str = ', '.join(tags[:5]) if isinstance(tags, list) and tags else 'exciting content'
             
-            prompt = f"Create a seductive 2-3 sentence description for this adult video: Title: {title_text}, Code: {code}, Starring: {actresses_str}, Tags: {tags_str}. Make it enticing and flirty with emojis."
+            # Create a more descriptive prompt for AI
+            prompt = f"{title_text}. Starring: {actresses_str}. Tags: {tags_str}. Code: {code}"
             
+            LOG.info(f"Sending prompt to AI: {prompt[:100]}...")
             ai_result = fetch_and_format(prompt, timeout=15)
+            
             if ai_result and len(ai_result.strip()) > 20:
                 description = ai_result
-                LOG.info("Generated description using AI")
+                LOG.info(f"✅ Generated AI description: {description[:100]}...")
             else:
+                LOG.warning(f"⚠️ AI returned invalid result: {ai_result}")
                 description = f"🔥 An absolutely captivating experience featuring {actresses_str} that will leave you wanting more! Don't miss this masterpiece! 💯✨"
                 LOG.info("Using enhanced fallback description")
         except Exception as e:
-            LOG.warning(f"Failed to generate AI description: {e}")
+            LOG.error(f"❌ Failed to generate AI description: {e}", exc_info=True)
             description = "🔥 An absolutely captivating experience that will leave you wanting more! Don't miss this masterpiece! 💯"
     
     caption_parts = [
         f"**📺 {title}**",
         "",
-        f"**➪ Episode:-** _01 [{duration}]_",
-        f"**➪ Subtitle:-** _English✅_",
+        f"**➪ Episode:-** __01 [{duration}]__",
+        f"**➪ Subtitle:-** __English✅__",
         f"**➪ Rating:-** __{rating}/10__",
         f"**#{recommendation}**",
         "",
         f"> {description}",
         "",
-        "_ᴘᴏᴡᴇʀᴇᴅ ʙʏ: @The_Wyverns_"
+        "**ᴘᴏᴡᴇʀᴇᴅ ʙʏ: @The_Wyverns**"
     ]
     
     return "\n".join(caption_parts)

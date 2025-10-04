@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Optional
 from pyrogram.client import Client
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors import FloodWait
 from ..config import SETTINGS
 from ..db import get_file_by_hash, add_file_record, is_failed_download
 from ..api.feed import get_title, sha1
@@ -107,9 +108,21 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
     try:
         if uploaded:
             link = getattr(msg, 'link', None) or f"Successfully processed: {title}"
-            await bot_client.send_message(SETTINGS.production_chat, f"✅ {link}")
+            try:
+                await bot_client.send_message(SETTINGS.production_chat, f"✅ {link}")
+            except FloodWait as e:
+                wait_time = int(e.value) if isinstance(e.value, (int, float, str)) else 60
+                LOG.warning(f"⏳ FloodWait: waiting {wait_time} seconds before sending success message")
+                await asyncio.sleep(wait_time)
+                await bot_client.send_message(SETTINGS.production_chat, f"✅ {link}")
         else:
-            await bot_client.send_message(SETTINGS.production_chat, "❌ No file uploaded")
+            try:
+                await bot_client.send_message(SETTINGS.production_chat, "❌ No file uploaded")
+            except FloodWait as e:
+                wait_time = int(e.value) if isinstance(e.value, (int, float, str)) else 60
+                LOG.warning(f"⏳ FloodWait: waiting {wait_time} seconds before sending failure message")
+                await asyncio.sleep(wait_time)
+                await bot_client.send_message(SETTINGS.production_chat, "❌ No file uploaded")
     except Exception as update_error:
         LOG.error(f"Failed to update production chat: {update_error}")
 

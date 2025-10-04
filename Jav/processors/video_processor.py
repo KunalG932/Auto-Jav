@@ -1,5 +1,3 @@
-# 
-
 import os
 import time
 import asyncio
@@ -8,6 +6,7 @@ import subprocess
 from typing import Dict, Any, Optional, Tuple
 from pyrogram.client import Client
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors import FloodWait
 from ..config import SETTINGS
 from ..services.downloader import download_torrent
 from ..services.uploader import upload_file, add_download_button, prepare_caption_content
@@ -30,7 +29,20 @@ async def process_video_download(
     
     os.makedirs('./downloads', exist_ok=True)
     
-    update_msg = await bot_client.send_message(SETTINGS.production_chat, f"📥 Downloading: {title}")
+    # Handle FloodWait for initial status message
+    update_msg = None
+    try:
+        update_msg = await bot_client.send_message(SETTINGS.production_chat, f"📥 Downloading: {title}")
+    except FloodWait as e:
+        wait_time = int(e.value) if isinstance(e.value, (int, float, str)) else 60
+        LOG.warning(f"⏳ FloodWait on status message: waiting {wait_time} seconds")
+        await asyncio.sleep(wait_time)
+        try:
+            update_msg = await bot_client.send_message(SETTINGS.production_chat, f"📥 Downloading: {title}")
+        except Exception as retry_error:
+            LOG.error(f"Failed to send status after FloodWait: {retry_error}")
+    except Exception as e:
+        LOG.error(f"Failed to send initial status message: {e}")
 
     async def safe_edit(text: str):
         try:
@@ -88,10 +100,11 @@ async def process_video_download(
         try:
             upload_path = await remux_if_needed(info['file'], safe_edit, title)
             
+            # Always try to encode if enabled, regardless of file size
             if SETTINGS.enable_encoding:
                 try:
                     await safe_edit(f"🔄 Encoding to 720p: {os.path.basename(upload_path)}")
-                    LOG.info(f"Starting FFEncoder encoding for: {upload_path}")
+                    LOG.info(f"🎬 Starting FFEncoder encoding for: {upload_path}")
                     
                     from ..services.encode import FFEncoder
                     
@@ -100,8 +113,10 @@ async def process_video_download(
                     base_name, ext = os.path.splitext(file_name)
                     output_name = f"{base_name}_encoded.mkv"
                     
+                    LOG.info(f"📝 Output filename: {output_name}")
                     encoder = FFEncoder(upload_path, output_name)
                     
+                    LOG.info(f"⏳ Encoding started, this may take a while...")
                     encoded_path = await encoder.start_encode()
                     
                     if encoded_path and os.path.exists(encoded_path):
@@ -199,7 +214,8 @@ async def process_video_download(
             LOG.warning(f"Failed to notify production chat: {notify_error}")
     
     try:
-        await update_msg.delete()
+        if update_msg:
+            await update_msg.delete()
     except Exception:
         pass
     
