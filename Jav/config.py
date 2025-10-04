@@ -35,8 +35,8 @@ class Settings:
     main_bot_token: str = os.getenv("MAIN_BOT_TOKEN", "")
     client_bot_token: str = os.getenv("CLIENT_BOT_TOKEN", "")
 
-    check_interval_sec: int = int(os.getenv("CHECK_INTERVAL_SEC", "300"))
-    api_endpoint: str = os.getenv("JAV_API_URL", "https://jav-api-w4od.onrender.com/api/latest?limit=10&sort_by_date=true&translate=true")
+    check_interval_sec: int = int(os.getenv("CHECK_INTERVAL_SEC", "7200"))
+    api_endpoint: str = os.getenv("JAV_API_URL", "https://jav-api-w4od.onrender.com/api/latest?limit=20&sort_by_date=true&translate=true")
     api_timeout_sec: int = int(os.getenv("JAV_API_TIMEOUT_SEC", "120"))
     api_retries: int = int(os.getenv("JAV_API_RETRIES", "5"))
     api_backoff_sec: int = int(os.getenv("JAV_API_BACKOFF_SEC", "30"))
