@@ -3,6 +3,9 @@ from aiofiles.os import rename as aiorename
 from asyncio import create_subprocess_shell
 from asyncio.subprocess import PIPE
 import glob
+import logging
+
+LOG = logging.getLogger("Jav")
 
 FFARGS_720P = (
     "-c:v libx264 -preset veryfast -crf 28 "
@@ -27,45 +30,70 @@ class FFEncoder:
         dl_npath = ospath.join("encode", "ffanimeadvin.mkv")
         out_npath = ospath.join("encode", "ffanimeadvout.mkv")
 
-        if ospath.isdir(self.dl_path):
-            files = glob.glob(ospath.join(self.dl_path, "*.mkv")) + glob.glob(ospath.join(self.dl_path, "*.mp4"))
-            if not files:
-                raise FileNotFoundError(f"No video file found inside directory: {self.dl_path}")
-            video_file = files[0]
-        else:
-            video_file = self.dl_path
+        try:
+            if ospath.isdir(self.dl_path):
+                files = glob.glob(ospath.join(self.dl_path, "*.mkv")) + glob.glob(ospath.join(self.dl_path, "*.mp4"))
+                if not files:
+                    LOG.error(f"❌ No video file found inside directory: {self.dl_path}")
+                    raise FileNotFoundError(f"No video file found inside directory: {self.dl_path}")
+                video_file = files[0]
+            else:
+                video_file = self.dl_path
 
-        await aiorename(video_file, dl_npath)
+            LOG.info(f"🔄 Renaming input: {video_file} -> {dl_npath}")
+            await aiorename(video_file, dl_npath)
 
-        ffcode = (
-            f"ffmpeg -hide_banner -loglevel error -i '{dl_npath}' "
-            f"-vf '{SCALE_720P}:flags=fast_bilinear' "
-            f"-map 0:v -map 0:a -map 0:s? "
-            f"{FFARGS_720P} "
-            f"-metadata title='@The_Wyverns' "
-            f"-metadata author='@The_Wyverns' "
-            f"-metadata artist='@The_Wyverns' "
-            f"-metadata album='@The_Wyverns' "
-            f"-metadata description='Encoded by @The_Wyverns' "
-            f"-metadata comment='@The_Wyverns' "
-            f"-metadata:s:s title='@The_Wyverns' "
-            f"-metadata:s:a title='@The_Wyverns' "
-            f"-metadata:s:v title='@The_Wyverns' "
-            f"'{out_npath}' -y"
-        )
+            ffcode = (
+                f"ffmpeg -hide_banner -loglevel error -i '{dl_npath}' "
+                f"-vf '{SCALE_720P}:flags=fast_bilinear' "
+                f"-map 0:v -map 0:a -map 0:s? "
+                f"{FFARGS_720P} "
+                f"-metadata title='@The_Wyverns' "
+                f"-metadata author='@The_Wyverns' "
+                f"-metadata artist='@The_Wyverns' "
+                f"-metadata album='@The_Wyverns' "
+                f"-metadata description='Encoded by @The_Wyverns' "
+                f"-metadata comment='@The_Wyverns' "
+                f"-metadata:s:s title='@The_Wyverns' "
+                f"-metadata:s:a title='@The_Wyverns' "
+                f"-metadata:s:v title='@The_Wyverns' "
+                f"'{out_npath}' -y"
+            )
 
-        self.__proc = await create_subprocess_shell(ffcode, stdout=PIPE, stderr=PIPE)
-        await self.__proc.wait()
+            LOG.info(f"🎬 Starting FFmpeg encoding...")
+            LOG.debug(f"FFmpeg command: {ffcode}")
+            
+            self.__proc = await create_subprocess_shell(ffcode, stdout=PIPE, stderr=PIPE)
+            stdout, stderr = await self.__proc.communicate()
 
-        await aiorename(dl_npath, self.dl_path)
+            LOG.info(f"🔄 Renaming back: {dl_npath} -> {video_file}")
+            await aiorename(dl_npath, video_file)
 
-        if self.is_cancelled:
-            return None
+            if self.is_cancelled:
+                LOG.warning("⚠️ Encoding was cancelled")
+                return None
 
-        if self.__proc.returncode == 0 and ospath.exists(out_npath):
-            await aiorename(out_npath, self.out_path)
-            return self.out_path
-        else:
+            if self.__proc.returncode == 0 and ospath.exists(out_npath):
+                LOG.info(f"✅ FFmpeg completed successfully, renaming output: {out_npath} -> {self.out_path}")
+                await aiorename(out_npath, self.out_path)
+                return self.out_path
+            else:
+                LOG.error(f"❌ FFmpeg failed with return code: {self.__proc.returncode}")
+                if stderr:
+                    LOG.error(f"FFmpeg stderr: {stderr.decode('utf-8', errors='ignore')}")
+                if stdout:
+                    LOG.info(f"FFmpeg stdout: {stdout.decode('utf-8', errors='ignore')}")
+                return None
+                
+        except Exception as e:
+            LOG.error(f"❌ Encoding exception: {e}", exc_info=True)
+            # Try to restore original file if it was renamed
+            try:
+                if ospath.exists(dl_npath) and not ospath.exists(self.dl_path):
+                    await aiorename(dl_npath, self.dl_path)
+                    LOG.info(f"🔄 Restored original file: {self.dl_path}")
+            except Exception as restore_error:
+                LOG.error(f"Failed to restore original file: {restore_error}")
             return None
 
     async def cancel_encode(self):
