@@ -67,7 +67,8 @@ async def process_video_download(
         except Exception:
             pass
 
-    info = await loop.run_in_executor(None, download_torrent, magnet, _progress_cb, title)
+    # Download torrent (torrent names are already translated by API)
+    info = await loop.run_in_executor(None, download_torrent, magnet, _progress_cb)
     
     LOG.info(f"Download executor returned: info={info}")
     if info:
@@ -93,10 +94,11 @@ async def process_video_download(
                     LOG.info(f"Starting FFEncoder encoding for: {upload_path}")
                     
                     from ..services.encode import FFEncoder
-                    from ..services.downloader import sanitize_filename
                     
-                    # Use sanitized API title for encoded filename
-                    output_name = f"{sanitize_filename(title)}_encoded.mkv"
+                    # Use original filename for encoding
+                    file_name = os.path.basename(upload_path)
+                    base_name, ext = os.path.splitext(file_name)
+                    output_name = f"{base_name}_encoded.mkv"
                     
                     encoder = FFEncoder(upload_path, output_name)
                     
@@ -408,45 +410,15 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
     Download thumbnail from API and return the local file path.
     Returns None if download fails.
     """
+    from ..common_utils import download_thumbnail
+    
     thumbnail_url = item.get('thumbnail')
-    
-    LOG.info(f"🔍 DEBUG generate_thumbnail - Item keys: {list(item.keys())}")
-    LOG.info(f"🔍 DEBUG generate_thumbnail - Thumbnail URL: {thumbnail_url}")
-    LOG.info(f"🔍 DEBUG generate_thumbnail - Thumbnail type: {type(thumbnail_url)}")
-    
     if not thumbnail_url:
         LOG.warning("No thumbnail URL in item")
         return None
     
-    try:
-        import requests
-        
-        LOG.info(f"Downloading thumbnail from: {thumbnail_url}")
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        response = requests.get(thumbnail_url, timeout=15, headers=headers)
-        response.raise_for_status()
-        
-        thumb_dir = "./thumbnails"
-        os.makedirs(thumb_dir, exist_ok=True)
-        
-        ext = '.jpg'
-        if '.' in thumbnail_url:
-            url_ext = thumbnail_url.split('.')[-1].split('?')[0].lower()
-            if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
-                ext = f'.{url_ext}'
-        
-        code = item.get('code', 'thumb')
-        thumb_path = os.path.join(thumb_dir, f"{code}_main{ext}")
-        
-        with open(thumb_path, 'wb') as f:
-            f.write(response.content)
-        
-        LOG.info(f"✅ Thumbnail downloaded successfully: {thumb_path}")
-        return thumb_path
-        
-    except Exception as e:
-        LOG.error(f"❌ Failed to download thumbnail from {thumbnail_url}: {e}")
-        return None
+    code = item.get('code', 'thumb')
+    return download_thumbnail(thumbnail_url, code, suffix='main')
 
 async def cleanup_files(original_file: str, processed_file: str):
     try:

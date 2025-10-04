@@ -47,35 +47,11 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
 
     thumb_path = None
     if item and item.get('thumbnail'):
-        try:
-            import requests
-            thumbnail_url = item.get('thumbnail')
-            if thumbnail_url and isinstance(thumbnail_url, str):
-                LOG.info(f"Downloading thumbnail from API: {thumbnail_url}")
-                
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-                response = requests.get(thumbnail_url, timeout=15, headers=headers)
-                response.raise_for_status()
-                
-                thumb_dir = "./thumbnails"
-                os.makedirs(thumb_dir, exist_ok=True)
-                
-                ext = '.jpg'
-                if '.' in thumbnail_url:
-                    url_ext = thumbnail_url.split('.')[-1].split('?')[0].lower()
-                    if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
-                        ext = f'.{url_ext}'
-                
-                code = item.get('code', 'thumb')
-                thumb_path = os.path.join(thumb_dir, f"{code}_upload{ext}")
-                
-                with open(thumb_path, 'wb') as f:
-                    f.write(response.content)
-                
-                LOG.info(f"Thumbnail downloaded: {thumb_path}")
-        except Exception as e:
-            LOG.warning(f"Failed to download thumbnail from API: {e}")
-            thumb_path = None
+        from ..common_utils import download_thumbnail
+        thumbnail_url = item.get('thumbnail')
+        if thumbnail_url and isinstance(thumbnail_url, str):
+            code = item.get('code', 'thumb')
+            thumb_path = download_thumbnail(thumbnail_url, code, suffix='upload')
     
     if not thumb_path:
         try:
