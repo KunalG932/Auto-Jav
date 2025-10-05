@@ -171,7 +171,7 @@ def create_enhanced_caption(title: str, item: Dict[str, Any], video_path: Option
         "",
         f"> {description}",
         "",
-        "**ᴘᴏᴡᴇʀᴇᴅ ʙʏ: @The_Wyverns**"
+        "**ᴘᴏᴡᴇʀᴇᴅ ʙʏ: [@The_Wyverns](https://t.me/Wyvern_Gateway_Bot?start=req_LTEwMDMxNjA3MzEwNjc)**"
     ]
     return "\n".join(caption_parts)
 
