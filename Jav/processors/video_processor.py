@@ -12,7 +12,7 @@ from pyrogram import errors
 from ..config import SETTINGS
 from ..services.downloader import download_torrent
 from ..services.uploader import upload_file, add_download_button, prepare_caption_content
-from ..api.ai_caption import fetch_and_format, format_for_post, create_enhanced_caption
+from ..api.ai_caption import format_for_post, create_enhanced_caption
 from ..utils import generate_hash
 from ..utils.telegraph import create_telegraph_preview_async
 from ..db import add_file_record

@@ -46,6 +46,31 @@ def sanitize_input(text: str) -> str:
         sanitized = re.sub(word_pattern, replacement, sanitized, flags=re.IGNORECASE)
     return sanitized
 
+def fetch_and_format(text: str, timeout: int = 10) -> Optional[str]:
+    """
+    Legacy function for backward compatibility.
+    Calls AI API with the given text and returns formatted caption.
+    """
+    if not text or not isinstance(text, str):
+        return None
+    
+    try:
+        # Sanitize the input text
+        sanitized = sanitize_input(text)
+        
+        # Call AI API to generate caption
+        result = call_ai_api(sanitized, mode="caption", timeout=timeout)
+        
+        if result:
+            LOG.info(f"AI caption generated: {result[:100]}...")
+            return result
+        else:
+            LOG.warning("AI API returned empty result")
+            return None
+    except Exception as e:
+        LOG.error(f"Error in fetch_and_format: {e}")
+        return None
+
 def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10) -> Optional[str]:
     if not prompt or not isinstance(prompt, str):
         return None

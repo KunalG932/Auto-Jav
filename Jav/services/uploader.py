@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from pyrogram import errors
 from ..config import SETTINGS
-from ..api.ai_caption import fetch_and_format, format_for_post
+from ..api.ai_caption import format_for_post
 
 LOG = logging.getLogger("Jav")
 
