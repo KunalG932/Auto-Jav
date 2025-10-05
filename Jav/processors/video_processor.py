@@ -8,11 +8,13 @@ import subprocess
 from typing import Dict, Any, Optional, Tuple
 from pyrogram.client import Client
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram import errors
 from ..config import SETTINGS
 from ..services.downloader import download_torrent
 from ..services.uploader import upload_file, add_download_button, prepare_caption_content
 from ..api.ai_caption import fetch_and_format, format_for_post, create_enhanced_caption
 from ..utils import generate_hash
+from ..utils.telegraph import create_telegraph_preview_async
 from ..db import add_file_record
 
 LOG = logging.getLogger("Jav")
@@ -40,7 +42,20 @@ async def process_video_download(
             mid = getattr(update_msg, 'id', None)
             if chat is None or mid is None:
                 return
-            await bot_client.edit_message_text(chat_id=chat.id, message_id=mid, text=text)
+            
+            chat_id = chat.id
+            message_id = mid
+            
+            try:
+                await bot_client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+            except errors.FloodWait as fw:
+                wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
+                LOG.warning(f"FloodWait error: sleeping for {wait_time} seconds")
+                await asyncio.sleep(float(wait_time))
+                try:
+                    await bot_client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+                except Exception:
+                    pass
         except Exception:
             pass
     
@@ -341,6 +356,26 @@ async def post_to_main_channel(
         LOG.info("Generating enhanced caption with AI...")
         post_caption = create_enhanced_caption(title, item, video_path)
         LOG.info(f"Caption generated: {post_caption[:100]}...")
+        
+        # Generate Telegraph preview with video screenshots
+        telegraph_url = None
+        if video_path and os.path.exists(video_path):
+            try:
+                LOG.info("🎬 Creating Telegraph preview with video screenshots...")
+                telegraph_url = await create_telegraph_preview_async(
+                    video_path=video_path,
+                    title=title,
+                    description=f"Preview for {title}",
+                    num_screenshots=6
+                )
+                if telegraph_url:
+                    LOG.info(f"✅ Telegraph preview created: {telegraph_url}")
+                    # Add Telegraph link to caption
+                    post_caption += f"\n\n🎬 [Video Preview]({telegraph_url})"
+                else:
+                    LOG.warning("Failed to create Telegraph preview")
+            except Exception as tg_error:
+                LOG.error(f"Error creating Telegraph preview: {tg_error}", exc_info=True)
 
         LOG.info("📥 Downloading thumbnail from API...")
         thumb_image = await generate_thumbnail(item)
@@ -355,6 +390,21 @@ async def post_to_main_channel(
                     caption=post_caption
                 )
                 LOG.info("✅ Successfully posted with thumbnail")
+            except errors.FloodWait as fw:
+                wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
+                LOG.warning(f"FloodWait when posting photo: sleeping for {wait_time} seconds")
+                await asyncio.sleep(float(wait_time))
+                try:
+                    main_msg = await bot_client.send_photo(
+                        SETTINGS.main_channel, 
+                        thumb_image, 
+                        caption=post_caption
+                    )
+                    LOG.info("✅ Successfully posted with thumbnail after FloodWait")
+                except Exception as retry_error:
+                    LOG.error(f"❌ Failed to send photo after FloodWait: {retry_error}")
+                    LOG.info("🔄 Trying text message instead...")
+                    main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption)
             except Exception as photo_error:
                 LOG.error(f"❌ Failed to send photo: {photo_error}")
                 LOG.info("🔄 Trying text message instead...")
@@ -372,6 +422,14 @@ async def post_to_main_channel(
                     try:
                         await bot_client.send_sticker(SETTINGS.main_channel, sid, reply_to_message_id=reply_id)
                         LOG.info("✅ Sticker sent successfully")
+                    except errors.FloodWait as fw:
+                        wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
+                        LOG.warning(f"FloodWait when sending sticker: sleeping for {wait_time} seconds")
+                        await asyncio.sleep(float(wait_time))
+                        try:
+                            await bot_client.send_sticker(SETTINGS.main_channel, sid, reply_to_message_id=reply_id)
+                        except Exception:
+                            pass
                     except Exception as e:
                         LOG.warning(f"Failed to send sticker: {e}")
                 
@@ -389,11 +447,24 @@ async def post_to_main_channel(
                     chat_id = getattr(main_msg, 'chat', None)
                     mid = getattr(main_msg, 'id', None)
                     if chat_id is not None and mid is not None:
-                        await bot_client.edit_message_reply_markup(
-                            chat_id=chat_id.id if hasattr(chat_id, 'id') else chat_id,
-                            message_id=mid,
-                            reply_markup=kb
-                        )
+                        try:
+                            await bot_client.edit_message_reply_markup(
+                                chat_id=chat_id.id if hasattr(chat_id, 'id') else chat_id,
+                                message_id=mid,
+                                reply_markup=kb
+                            )
+                        except errors.FloodWait as fw:
+                            wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
+                            LOG.warning(f"FloodWait when editing reply markup: sleeping for {wait_time} seconds")
+                            await asyncio.sleep(float(wait_time))
+                            try:
+                                await bot_client.edit_message_reply_markup(
+                                    chat_id=chat_id.id if hasattr(chat_id, 'id') else chat_id,
+                                    message_id=mid,
+                                    reply_markup=kb
+                                )
+                            except Exception:
+                                pass
                 else:
                     if file_hash:
                         await add_download_button(bot_client, main_msg, bot_username, file_hash)

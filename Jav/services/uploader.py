@@ -3,6 +3,7 @@ import logging
 import asyncio
 from typing import Dict, Any, Optional
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
+from pyrogram import errors
 from ..config import SETTINGS
 from ..api.ai_caption import fetch_and_format, format_for_post
 
@@ -131,10 +132,25 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
                             force_document=True,
                             thumb=thumb_path,
                         )
+                    except errors.FloodWait as fw:
+                        wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
+                        LOG.warning(f"FloodWait during upload: sleeping for {wait_time} seconds (attempt {attempt})")
+                        await asyncio.sleep(float(wait_time))
+                        # Retry after waiting
+                        if attempt < attempts:
+                            continue
+                        raise
                     except Exception as send_exc:
                         LOG.exception(f"send_document attempt {attempt} failed (client={client_to_use}, target_chat={target_chat}): {send_exc}")
                         raise
                 break
+            except errors.FloodWait as fw:
+                wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
+                LOG.warning(f"FloodWait on attempt {attempt}: waiting {wait_time}s before retry")
+                await asyncio.sleep(float(wait_time))
+                if attempt == attempts:
+                    raise
+                continue
             except Exception as e:
                 LOG.warning(f"upload_file attempt {attempt} failed: {e}")
                 msg = None
@@ -156,5 +172,16 @@ async def add_download_button(bot, message: Message, bot_username: str, file_has
             [[InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗡𝗢𝗪", url=f"https://t.me/{bot_username}?start={file_hash}")]]
         )
         await message.edit_reply_markup(markup)
+    except errors.FloodWait as fw:
+        wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
+        LOG.warning(f"FloodWait when adding download button: sleeping for {wait_time} seconds")
+        await asyncio.sleep(float(wait_time))
+        try:
+            markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗡𝗢𝗪", url=f"https://t.me/{bot_username}?start={file_hash}")]]
+            )
+            await message.edit_reply_markup(markup)
+        except Exception as retry_e:
+            LOG.exception(f"Failed to add download button after FloodWait retry: {retry_e}")
     except Exception as e:
         LOG.exception(f"add_download_button error: {e}")

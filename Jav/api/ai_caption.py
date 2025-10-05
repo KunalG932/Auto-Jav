@@ -5,6 +5,7 @@ import os
 from typing import Optional, Dict, Any
 import re
 import random
+import asyncio
 
 LOG = logging.getLogger("Jav")
 
@@ -45,7 +46,8 @@ def sanitize_input(text: str) -> str:
         sanitized = re.sub(word_pattern, replacement, sanitized, flags=re.IGNORECASE)
     return sanitized
 
-def fetch_and_format(content: str, timeout: int = 8) -> Optional[str]:
+def fetch_and_format(content: str, timeout: int = 8, max_retries: int = 2) -> Optional[str]:
+    """Fetch AI-generated caption with retry logic and enhanced error handling."""
     if not content or not isinstance(content, str):
         return None
 
@@ -77,27 +79,47 @@ def fetch_and_format(content: str, timeout: int = 8) -> Optional[str]:
         ]
     }
 
-    try:
-        resp = requests.post(
-            url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        LOG.warning(f"AI caption request failed: {e}")
-        return None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.post(
+                url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            
+            try:
+                data = resp.json()
+            except Exception as e:
+                LOG.warning(f"Failed to parse JSON from AI caption response (attempt {attempt + 1}): {e}")
+                if attempt < max_retries:
+                    continue
+                return None
 
-    try:
-        data = resp.json()
-    except Exception as e:
-        LOG.warning(f"Failed to parse JSON from AI caption response: {e}")
-        return None
-
-    content_field = data.get("content")
-    if content_field and isinstance(content_field, str):
-        return content_field.strip()
+            content_field = data.get("content")
+            if content_field and isinstance(content_field, str):
+                return content_field.strip()
+            
+            msg = data.get("message")
+            if isinstance(msg, str) and msg.strip():
+                return msg.strip()
+                
+            LOG.debug(f"AI caption service returned no content (attempt {attempt + 1}): {data}")
+            
+        except requests.exceptions.Timeout:
+            LOG.warning(f"AI caption request timeout (attempt {attempt + 1}/{max_retries + 1})")
+            if attempt < max_retries:
+                continue
+        except requests.exceptions.RequestException as e:
+            LOG.warning(f"AI caption request failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
+            if attempt < max_retries:
+                continue
+        except Exception as e:
+            LOG.error(f"Unexpected error in AI caption generation: {e}")
+            return None
+    
+    return None
 
     msg = data.get("message")
     if isinstance(msg, str) and msg.strip():
@@ -107,8 +129,9 @@ def fetch_and_format(content: str, timeout: int = 8) -> Optional[str]:
     return None
 
 def get_video_duration(file_path: str) -> Optional[str]:
-    
+    """Extract video duration using ffprobe with enhanced error handling."""
     if not os.path.exists(file_path):
+        LOG.warning(f"Video file not found: {file_path}")
         return None
     
     try:
@@ -119,17 +142,35 @@ def get_video_duration(file_path: str) -> Optional[str]:
             '-of', 'default=noprint_wrappers=1:nokey=1',
             file_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode == 0 and result.stdout.strip():
-            duration_sec = float(result.stdout.strip())
-            hours = int(duration_sec // 3600)
-            minutes = int((duration_sec % 3600) // 60)
-            seconds = int(duration_sec % 60)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        
+        if result.returncode != 0:
+            LOG.warning(f"ffprobe failed with return code {result.returncode}: {result.stderr}")
+            return None
             
-            if hours > 0:
-                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            else:
-                return f"{minutes:02d}:{seconds:02d}"
+        if result.stdout.strip():
+            try:
+                duration_sec = float(result.stdout.strip())
+                
+                if duration_sec <= 0:
+                    LOG.warning(f"Invalid duration value: {duration_sec}")
+                    return None
+                    
+                hours = int(duration_sec // 3600)
+                minutes = int((duration_sec % 3600) // 60)
+                seconds = int(duration_sec % 60)
+                
+                if hours > 0:
+                    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                else:
+                    return f"{minutes:02d}:{seconds:02d}"
+            except ValueError as ve:
+                LOG.warning(f"Could not parse duration value: {result.stdout.strip()}, error: {ve}")
+                return None
+    except subprocess.TimeoutExpired:
+        LOG.warning(f"ffprobe timeout for file: {file_path}")
+    except FileNotFoundError:
+        LOG.error("ffprobe not found. Please install ffmpeg.")
     except Exception as e:
         LOG.warning(f"Failed to get video duration: {e}")
     
