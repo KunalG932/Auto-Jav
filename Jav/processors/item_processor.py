@@ -159,35 +159,15 @@ async def post_without_file(bot_client: Client, item: Dict[str, Any], caption: s
         LOG.info("Using default caption (AI caption not available)")
         post_caption = caption
 
-    api_thumbnail_url = item.get('thumbnail')
-    thumbnail_file = None
+    # Use common utility for thumbnail download
+    from ..utils import download_thumbnail
     
-    if api_thumbnail_url:
-        try:
-            import requests
-            LOG.info(f"Downloading thumbnail from: {api_thumbnail_url}")
-            response = requests.get(api_thumbnail_url, timeout=15)
-            response.raise_for_status()
-            
-            thumb_dir = "./thumbnails"
-            os.makedirs(thumb_dir, exist_ok=True)
-            
-            ext = '.jpg'
-            if '.' in api_thumbnail_url:
-                url_ext = api_thumbnail_url.split('.')[-1].split('?')[0].lower()
-                if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
-                    ext = f'.{url_ext}'
-            
-            code = item.get('code', 'thumb_no_file')
-            thumbnail_file = os.path.join(thumb_dir, f"{code}{ext}")
-            
-            with open(thumbnail_file, 'wb') as f:
-                f.write(response.content)
-            
-            LOG.info(f"Thumbnail downloaded successfully: {thumbnail_file}")
-        except Exception as e:
-            LOG.warning(f"Failed to download thumbnail: {e}")
-            thumbnail_file = None
+    api_thumbnail_url = item.get('thumbnail')
+    filename_prefix = f"{item.get('code', 'thumb_no_file')}"
+    thumbnail_file = download_thumbnail(
+        api_thumbnail_url,
+        filename_prefix=filename_prefix
+    ) if api_thumbnail_url else None
     
     buttons = []
     if torrent_links:

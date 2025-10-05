@@ -35,6 +35,9 @@ async def process_video_download(
     update_msg = await bot_client.send_message(SETTINGS.production_chat, f"📥 Downloading: {title}")
 
     async def safe_edit(text: str):
+        """Safely edit message with FloodWait handling."""
+        from ..utils import handle_flood_wait
+        
         try:
             if not update_msg:
                 return
@@ -47,15 +50,13 @@ async def process_video_download(
             message_id = mid
             
             try:
-                await bot_client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
-            except errors.FloodWait as fw:
-                wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
-                LOG.warning(f"FloodWait error: sleeping for {wait_time} seconds")
-                await asyncio.sleep(float(wait_time))
-                try:
-                    await bot_client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
-                except Exception:
-                    pass
+                await handle_flood_wait(
+                    bot_client.edit_message_text,
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    operation_name="edit progress message"
+                )
             except Exception as e:
                 # Log non-timeout errors at warning level for better visibility
                 error_msg = str(e).lower()
@@ -409,28 +410,17 @@ async def post_to_main_channel(
         # Post to main channel with thumbnail
         if thumb_image:
             try:
+                from ..utils import handle_flood_wait
+                
                 LOG.info(f"📤 Posting to main channel with thumbnail...")
-                main_msg = await bot_client.send_photo(
-                    SETTINGS.main_channel, 
-                    thumb_image, 
-                    caption=post_caption
+                main_msg = await handle_flood_wait(
+                    bot_client.send_photo,
+                    SETTINGS.main_channel,
+                    thumb_image,
+                    caption=post_caption,
+                    operation_name="send photo to main channel"
                 )
                 LOG.info("✅ Successfully posted with thumbnail")
-            except errors.FloodWait as fw:
-                wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
-                LOG.warning(f"FloodWait when posting photo: sleeping for {wait_time} seconds")
-                await asyncio.sleep(float(wait_time))
-                try:
-                    main_msg = await bot_client.send_photo(
-                        SETTINGS.main_channel, 
-                        thumb_image, 
-                        caption=post_caption
-                    )
-                    LOG.info("✅ Successfully posted with thumbnail after FloodWait")
-                except Exception as retry_error:
-                    LOG.error(f"❌ Failed to send photo after FloodWait: {retry_error}")
-                    LOG.info("🔄 Trying text message instead...")
-                    main_msg = await bot_client.send_message(SETTINGS.main_channel, post_caption)
             except Exception as photo_error:
                 LOG.error(f"❌ Failed to send photo: {photo_error}")
                 LOG.info("🔄 Trying text message instead...")
@@ -441,21 +431,21 @@ async def post_to_main_channel(
         
         try:
             if main_msg is not None:
+                from ..utils import handle_flood_wait
+                
                 sticker_id = SETTINGS.sticker_id
                 mid = getattr(main_msg, 'id', None)
                 
                 async def _send_sticker_async(sid, reply_id):
                     try:
-                        await bot_client.send_sticker(SETTINGS.main_channel, sid, reply_to_message_id=reply_id)
+                        await handle_flood_wait(
+                            bot_client.send_sticker,
+                            SETTINGS.main_channel,
+                            sid,
+                            reply_to_message_id=reply_id,
+                            operation_name="send sticker"
+                        )
                         LOG.info("✅ Sticker sent successfully")
-                    except errors.FloodWait as fw:
-                        wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
-                        LOG.warning(f"FloodWait when sending sticker: sleeping for {wait_time} seconds")
-                        await asyncio.sleep(float(wait_time))
-                        try:
-                            await bot_client.send_sticker(SETTINGS.main_channel, sid, reply_to_message_id=reply_id)
-                        except Exception:
-                            pass
                     except Exception as e:
                         LOG.warning(f"Failed to send sticker: {e}")
                 
@@ -510,80 +500,33 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
     Download thumbnail from API and return the local file path.
     Returns None if download fails.
     """
+    from ..utils import download_thumbnail
+    
     thumbnail_url = item.get('thumbnail')
     if not thumbnail_url:
         LOG.warning("No thumbnail URL in item")
         return None
     
-    try:
-        import requests
-        
-        LOG.info(f"Downloading thumbnail from: {thumbnail_url}")
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        response = requests.get(thumbnail_url, timeout=15, headers=headers)
-        response.raise_for_status()
-        
-        thumb_dir = "./thumbnails"
-        os.makedirs(thumb_dir, exist_ok=True)
-        
-        ext = '.jpg'
-        if '.' in thumbnail_url:
-            url_ext = thumbnail_url.split('.')[-1].split('?')[0].lower()
-            if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
-                ext = f'.{url_ext}'
-        
-        code = item.get('code', 'thumb')
-        thumb_path = os.path.join(thumb_dir, f"{code}_main{ext}")
-        
-        with open(thumb_path, 'wb') as f:
-            f.write(response.content)
-        
-        LOG.info(f"✅ Thumbnail downloaded successfully: {thumb_path}")
-        return thumb_path
-        
-    except Exception as e:
-        LOG.error(f"❌ Failed to download thumbnail from {thumbnail_url}: {e}")
-        return None
+    filename_prefix = f"{item.get('code', 'thumb')}_main"
+    return download_thumbnail(thumbnail_url, filename_prefix=filename_prefix)
 
 async def cleanup_files(original_file: str, processed_file: str):
-    try:
-        if os.path.exists(original_file):
-            os.remove(original_file)
-            LOG.info(f"Cleaned up file: {original_file}")
-    except Exception as cleanup_error:
-        LOG.warning(f"Failed to cleanup file {original_file}: {cleanup_error}")
-
-    if processed_file and processed_file != original_file and os.path.exists(processed_file):
-        try:
-            os.remove(processed_file)
-            LOG.info(f"Cleaned up remuxed file: {processed_file}")
-        except Exception as cleanup_error2:
-            LOG.warning(f"Failed to cleanup remuxed file {processed_file}: {cleanup_error2}")
+    """Clean up original and processed files after upload."""
+    from ..utils import cleanup_files as cleanup_util
+    
+    files_to_cleanup = [original_file]
+    if processed_file and processed_file != original_file:
+        files_to_cleanup.append(processed_file)
+    
+    cleanup_util(*files_to_cleanup)
 
 async def cleanup_directories():
     """
     Cleanup downloads and encode directories after successful upload.
     """
-    import shutil
+    from ..utils import cleanup_directory
     
     directories = ["./downloads", "./encode"]
     
     for directory in directories:
-        try:
-            if os.path.exists(directory):
-                # Remove all files in the directory
-                for filename in os.listdir(directory):
-                    file_path = os.path.join(directory, filename)
-                    try:
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            LOG.info(f"🗑️ Deleted: {file_path}")
-                        elif os.path.isdir(file_path):
-                            shutil.rmtree(file_path)
-                            LOG.info(f"🗑️ Deleted directory: {file_path}")
-                    except Exception as e:
-                        LOG.warning(f"Failed to delete {file_path}: {e}")
-                
-                LOG.info(f"✅ Cleaned up {directory} directory")
-        except Exception as e:
-            LOG.warning(f"Failed to cleanup {directory}: {e}")
+        cleanup_directory(directory)

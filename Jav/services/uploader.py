@@ -45,50 +45,16 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     else:
         doc_caption = os.path.basename(abs_path)
 
-    thumb_path = None
-    if item and item.get('thumbnail'):
-        try:
-            import requests
-            thumbnail_url = item.get('thumbnail')
-            if thumbnail_url and isinstance(thumbnail_url, str):
-                LOG.info(f"Downloading thumbnail from API: {thumbnail_url}")
-                
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-                response = requests.get(thumbnail_url, timeout=15, headers=headers)
-                response.raise_for_status()
-                
-                thumb_dir = "./thumbnails"
-                os.makedirs(thumb_dir, exist_ok=True)
-                
-                ext = '.jpg'
-                if '.' in thumbnail_url:
-                    url_ext = thumbnail_url.split('.')[-1].split('?')[0].lower()
-                    if url_ext in ['jpg', 'jpeg', 'png', 'webp']:
-                        ext = f'.{url_ext}'
-                
-                code = item.get('code', 'thumb')
-                thumb_path = os.path.join(thumb_dir, f"{code}_upload{ext}")
-                
-                with open(thumb_path, 'wb') as f:
-                    f.write(response.content)
-                
-                LOG.info(f"Thumbnail downloaded: {thumb_path}")
-        except Exception as e:
-            LOG.warning(f"Failed to download thumbnail from API: {e}")
-            thumb_path = None
+    # Use common utility for thumbnail download with fallback
+    from ..utils import download_thumbnail_with_fallback
     
-    if not thumb_path:
-        try:
-            tp = getattr(SETTINGS, 'thumbnail_path', None)
-            if tp:
-                tp_abs = os.path.abspath(tp)
-                LOG.info(f"Using fallback thumbnail at: {tp_abs}")
-                if os.path.exists(tp_abs):
-                    thumb_path = tp_abs
-                else:
-                    LOG.warning(f"Fallback thumbnail not found: {tp_abs}")
-        except Exception:
-            thumb_path = None
+    thumbnail_url = item.get('thumbnail') if item else None
+    filename_prefix = f"{item.get('code', 'thumb')}_upload" if item and item.get('code') else 'thumb_upload'
+    thumb_path = download_thumbnail_with_fallback(
+        thumbnail_url,
+        SETTINGS,
+        filename_prefix=filename_prefix
+    )
 
     upload_path = abs_path
     LOG.info("Encoding/size-reduction disabled; proceeding to upload original file")
@@ -166,21 +132,18 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     return msg
 
 async def add_download_button(bot, message: Message, bot_username: str, file_hash: str) -> None:
+    """Add download button to message with automatic FloodWait handling."""
+    from ..utils import handle_flood_wait
+    
+    markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗡𝗢𝗪", url=f"https://t.me/{bot_username}?start={file_hash}")]]
+    )
+    
     try:
-        markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗡𝗢𝗪", url=f"https://t.me/{bot_username}?start={file_hash}")]]
+        await handle_flood_wait(
+            message.edit_reply_markup,
+            markup,
+            operation_name="add download button"
         )
-        await message.edit_reply_markup(markup)
-    except errors.FloodWait as fw:
-        wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
-        LOG.warning(f"FloodWait when adding download button: sleeping for {wait_time} seconds")
-        await asyncio.sleep(float(wait_time))
-        try:
-            markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗡𝗢𝗪", url=f"https://t.me/{bot_username}?start={file_hash}")]]
-            )
-            await message.edit_reply_markup(markup)
-        except Exception as retry_e:
-            LOG.exception(f"Failed to add download button after FloodWait retry: {retry_e}")
     except Exception as e:
         LOG.exception(f"add_download_button error: {e}")
