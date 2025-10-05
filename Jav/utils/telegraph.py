@@ -6,10 +6,42 @@ import os
 import logging
 import subprocess
 import tempfile
+import requests
 from typing import Optional, List
 from html_telegraph_poster import TelegraphPoster
 
 LOG = logging.getLogger("Jav")
+
+
+def upload_image_to_host(image_path: str) -> Optional[str]:
+    """
+    Upload an image to envs.sh and return the URL.
+    
+    Args:
+        image_path: Path to the image file
+        
+    Returns:
+        URL of the uploaded image, or None if failed
+    """
+    try:
+        with open(image_path, 'rb') as img_file:
+            files = {'file': img_file}
+            response = requests.post('https://envs.sh', files=files, timeout=30)
+            response.raise_for_status()
+            
+            # envs.sh returns the direct URL in the response text
+            image_url = response.text.strip()
+            
+            if image_url and image_url.startswith('http'):
+                LOG.debug(f"Uploaded image to: {image_url}")
+                return image_url
+            else:
+                LOG.warning(f"Invalid response from image host: {response.text}")
+                return None
+                
+    except Exception as e:
+        LOG.error(f"Failed to upload image to host: {e}")
+        return None
 
 
 def extract_video_screenshots(video_path: str, num_screenshots: int = 6) -> List[str]:
@@ -124,7 +156,7 @@ def create_telegraph_preview(
         poster = TelegraphPoster(use_api=True)
         poster.create_api_token('JAV Bot', 'JAV Preview', 'https://t.me/AutoMangaCampus')
         
-        # Build HTML content with proper image handling
+        # Build HTML content with uploaded image URLs
         html_parts = []
         
         # Add description if provided
@@ -133,26 +165,35 @@ def create_telegraph_preview(
         
         html_parts.append("<p>📸 Video Preview Screenshots:</p>")
         
-        # Add screenshots with proper HTML img tags
-        # TelegraphPoster will handle the image upload when we pass local file paths
+        # Upload screenshots to image host and add to Telegraph page
+        uploaded_count = 0
         for idx, screenshot_path in enumerate(screenshots, 1):
             try:
-                # TelegraphPoster can handle local file paths in img tags
-                # It will upload them automatically when posting
-                img_tag = f'<img src="{screenshot_path}"/>'
-                html_parts.append(img_tag)
+                LOG.info(f"Uploading screenshot {idx}/{len(screenshots)} to image host...")
                 
-                LOG.info(f"Added screenshot {idx}/{len(screenshots)} to Telegraph page")
+                # Upload image to envs.sh
+                image_url = upload_image_to_host(screenshot_path)
+                
+                if image_url:
+                    # Add image with the uploaded URL
+                    img_tag = f'<img src="{image_url}"/>'
+                    html_parts.append(img_tag)
+                    uploaded_count += 1
+                    LOG.info(f"✅ Added screenshot {idx}/{len(screenshots)} with URL: {image_url}")
+                else:
+                    LOG.warning(f"Failed to upload screenshot {idx}, skipping")
                 
             except Exception as e:
-                LOG.warning(f"Failed to add screenshot {idx}: {e}")
+                LOG.warning(f"Failed to process screenshot {idx}: {e}")
                 continue
         
-        if len(html_parts) <= 2:  # Only has description and header, no images
-            LOG.error("No images added to Telegraph page")
+        if uploaded_count == 0:
+            LOG.error("No images uploaded successfully, cannot create Telegraph page")
             return None
         
-        # Create the page - TelegraphPoster will upload images and return the page
+        LOG.info(f"Successfully uploaded {uploaded_count}/{len(screenshots)} screenshots")
+        
+        # Create the Telegraph page with uploaded image URLs
         html_content = "\n".join(html_parts)
         
         try:

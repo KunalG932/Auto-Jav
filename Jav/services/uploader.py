@@ -30,8 +30,7 @@ def prepare_caption_content(item: Dict[str, Any]) -> str:
     return " | ".join([c for c in chunks if c])
 
 async def upload_file(file_client, file_path: str, title: Optional[str] = None,
-                      item: Optional[Dict[str, Any]] = None,
-                      send_ai_caption: bool = False) -> Optional[Message]:
+                      item: Optional[Dict[str, Any]] = None) -> Optional[Message]:
     try:
         abs_path = os.path.abspath(file_path)
         if not os.path.exists(abs_path):

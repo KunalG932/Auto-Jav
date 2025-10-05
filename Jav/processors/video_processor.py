@@ -386,8 +386,6 @@ async def post_to_main_channel(
                 )
                 if telegraph_url:
                     LOG.info(f"✅ Telegraph preview created: {telegraph_url}")
-                    # Add Telegraph link to caption
-                    post_caption += f"\n\n🎬 [Video Preview]({telegraph_url})"
                 else:
                     LOG.warning("Failed to create Telegraph preview")
             except Exception as tg_error:
@@ -463,10 +461,15 @@ async def post_to_main_channel(
         try:
             if main_msg is not None:
                 if part_hashes and len(part_hashes) >= 2:
-                    kb = InlineKeyboardMarkup([[
+                    # Build keyboard buttons
+                    buttons = [[
                         InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗣𝗔𝗥𝗧 𝟭", url=f"https://t.me/{bot_username}?start={part_hashes[0]}"),
                         InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗣𝗔𝗥𝗧 𝟮", url=f"https://t.me/{bot_username}?start={part_hashes[1]}")
-                    ]])
+                    ]]
+                    # Add Telegraph preview button if available
+                    if telegraph_url:
+                        buttons.append([InlineKeyboardButton(text="Video Preview", url=telegraph_url)])
+                    kb = InlineKeyboardMarkup(buttons)
                     chat_id = getattr(main_msg, 'chat', None)
                     mid = getattr(main_msg, 'id', None)
                     if chat_id is not None and mid is not None:
