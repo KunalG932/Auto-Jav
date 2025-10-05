@@ -211,7 +211,7 @@ async def post_without_file(bot_client: Client, item: Dict[str, Any], caption: s
     
     try:
         if main_msg is not None:
-            sticker_id = "CAACAgUAAx0CfPp_PwABAbRpaN9Edq9LmkFQPK_ea8U4u8I7_2MAAq8YAAKcZulW-3JDFK03uP8eBA"
+            sticker_id = "CAACAgUAAx0CfPp_PwABAcDbaOJjfQ7heaCB2i0QYNE41czE0KAAAq8YAAKcZulW-3JDFK03uP8eBA"
             mid = getattr(main_msg, 'id', None)
             
             async def _send_sticker_async(sid, reply_id):

@@ -36,7 +36,7 @@ class Settings:
     client_bot_token: str = os.getenv("CLIENT_BOT_TOKEN", "")
 
     check_interval_sec: int = int(os.getenv("CHECK_INTERVAL_SEC", "300"))
-    api_endpoint: str = os.getenv("JAV_API_URL", "https://jav-api-w4od.onrender.com/api/latest?limit=10&sort_by_date=true&translate=true")
+    api_endpoint: str = os.getenv("JAV_API_URL", "https://jav-api-w4od.onrender.com/api/latest?limit=10&sort_by_date=false&translate=true")
     api_timeout_sec: int = int(os.getenv("JAV_API_TIMEOUT_SEC", "120"))
     api_retries: int = int(os.getenv("JAV_API_RETRIES", "5"))
     api_backoff_sec: int = int(os.getenv("JAV_API_BACKOFF_SEC", "30"))
@@ -54,6 +54,6 @@ class Settings:
     encode_audio_codec: str = os.getenv("ENCODE_AUDIO_CODEC", "aac")
     encode_audio_bitrate: str = os.getenv("ENCODE_AUDIO_BITRATE", "128k")
 
-    sticker_id: str = os.getenv("STICKER_ID", "CAACAgUAAx0CfPp_PwABAX9taNZsQyInPz500GChLCk3uconkqwAAhESAALeIohXvOSc_GX-md4eBA")
+    sticker_id: str = os.getenv("STICKER_ID", "CAACAgUAAx0CfPp_PwABAcDbaOJjfQ7heaCB2i0QYNE41czE0KAAAq8YAAKcZulW-3JDFK03uP8eBA")
 
 SETTINGS = Settings()
