@@ -216,8 +216,8 @@ async def failed_command(client: Client, message: Message):
             try:
                 result = failed_downloads.delete_many({})
                 await message.reply_text(
-                    f"🗑️ **Cleared Failed Downloads**\\n\\n"
-                    f"Deleted {result.deleted_count} failed download records.\\n"
+                    f"🗑️ **Cleared Failed Downloads**\n\n"
+                    f"Deleted {result.deleted_count} failed download records.\n"
                     f"These videos can now be downloaded again."
                 )
                 LOG.info(f"Cleared {result.deleted_count} failed downloads")
@@ -231,8 +231,8 @@ async def failed_command(client: Client, message: Message):
             try:
                 remove_failed_download(param)
                 await message.reply_text(
-                    f"✅ **Removed from Failed List**\\n\\n"
-                    f"Title: `{param}`\\n\\n"
+                    f"✅ **Removed from Failed List**\n\n"
+                    f"Title: `{param}`\n\n"
                     f"This video can now be downloaded again."
                 )
                 return
@@ -246,12 +246,12 @@ async def failed_command(client: Client, message: Message):
             
             if not failed_list:
                 await message.reply_text(
-                    "✅ **No Failed Downloads**\\n\\n"
+                    "✅ **No Failed Downloads**\n\n"
                     "There are no failed downloads in the database."
                 )
                 return
             
-            response = f"❌ **Failed Downloads ({len(failed_list)})**\\n\\n"
+            response = f"❌ **Failed Downloads ({len(failed_list)})**\n\n"
             
             for idx, item in enumerate(failed_list[:20], 1):
                 title = item.get('title', 'Unknown')
@@ -262,18 +262,18 @@ async def failed_command(client: Client, message: Message):
                 if len(title) > 50:
                     title = title[:47] + "..."
                 
-                response += f"{idx}. **{title}**\\n"
-                response += f"   ├ Date: `{failed_date}`\\n"
-                response += f"   └ Reason: `{reason[:50]}`\\n\\n"
+                response += f"{idx}. **{title}**\n"
+                response += f"   ├ Date: `{failed_date}`\n"
+                response += f"   └ Reason: `{reason[:50]}`\n\n"
             
             if len(failed_list) > 20:
-                response += f"\\n...and {len(failed_list) - 20} more\\n\\n"
+                response += f"\n...and {len(failed_list) - 20} more\n\n"
             
             response += (
-                "**Commands:**\\n"
-                "• `/failed` - Show this list\\n"
-                "• `/failed clear` - Clear all failed downloads\\n"
-                "• `/failed remove <title>` - Remove specific title\\n"
+                "**Commands:**\n"
+                "• `/failed` - Show this list\n"
+                "• `/failed clear` - Clear all failed downloads\n"
+                "• `/failed remove <title>` - Remove specific title\n"
             )
             
             await message.reply_text(response)

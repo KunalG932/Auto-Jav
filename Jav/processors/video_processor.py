@@ -57,11 +57,16 @@ async def process_video_download(
                 except Exception:
                     pass
             except Exception as e:
-                # Silently skip timeouts and other errors to avoid spam
-                if "timed out" not in str(e).lower():
-                    LOG.debug(f"Edit message error: {e}")
-        except Exception:
-            pass
+                # Log non-timeout errors at warning level for better visibility
+                error_msg = str(e).lower()
+                if "timed out" in error_msg:
+                    LOG.debug(f"Edit message timeout (expected): {e}")
+                elif "message is not modified" in error_msg or "message_not_modified" in error_msg:
+                    LOG.debug(f"Message already up to date: {e}")
+                else:
+                    LOG.warning(f"Edit message error: {e}")
+        except Exception as outer_e:
+            LOG.warning(f"Unexpected error in safe_edit: {outer_e}")
     
     loop = asyncio.get_event_loop()
     last_edit_ts = 0.0

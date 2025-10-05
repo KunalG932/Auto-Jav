@@ -95,8 +95,20 @@ def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10) -> Option
         r.raise_for_status()
         data = r.json()
         return data.get("content") or data.get("message")
+    except requests.exceptions.Timeout:
+        LOG.warning(f"AI API request timed out after {timeout}s")
+        return None
+    except requests.exceptions.HTTPError as e:
+        LOG.warning(f"AI API HTTP error: {e.response.status_code if hasattr(e, 'response') else e}")
+        return None
+    except requests.exceptions.RequestException as e:
+        LOG.warning(f"AI API network error: {e}")
+        return None
+    except (ValueError, KeyError) as e:
+        LOG.warning(f"AI API response parsing error: {e}")
+        return None
     except Exception as e:
-        LOG.warning(f"AI request failed: {e}")
+        LOG.error(f"Unexpected AI API error: {e}", exc_info=True)
         return None
 
 def get_video_duration(file_path: str) -> Optional[str]:

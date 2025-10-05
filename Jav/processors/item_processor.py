@@ -87,16 +87,24 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
                 )
                 LOG.info(f"📤 Download process completed: uploaded={uploaded}, title={title}")
                 
-                # Mark as failed if upload was not successful
+                # Note: Don't mark as failed here if only upload failed
+                # Upload failures could be temporary (network issues, etc.)
+                # Only mark download as failed if the actual download fails
                 if not uploaded:
-                    from ..db import add_failed_download
-                    add_failed_download(title, magnet, "Upload failed after download")
+                    LOG.warning(f"⚠️ Upload failed for {title}, but download was successful")
+                    # Upload failures are logged but not permanently marked as failed
+                    # This allows retry on next run if needed
                     
             except Exception as download_error:
-                LOG.error(f"Download/upload failed for {title}: {download_error}", exc_info=True)
-                # Mark this download as failed to prevent retrying
-                from ..db import add_failed_download
-                add_failed_download(title, magnet, str(download_error))
+                LOG.error(f"Download failed for {title}: {download_error}", exc_info=True)
+                # Only mark as permanently failed if download itself failed (no peers, timeout, etc.)
+                error_msg = str(download_error).lower()
+                if any(keyword in error_msg for keyword in ['no peers', 'timeout', 'metadata', 'stalled']):
+                    from ..db import add_failed_download
+                    add_failed_download(title, magnet, f"Download error: {str(download_error)[:100]}")
+                    LOG.info(f"❌ Marked as permanently failed: {title}")
+                else:
+                    LOG.warning(f"⚠️ Download error (may retry): {title}")
     else:
         LOG.info(f"No magnet link for {title}, posting with API thumbnail")
         try:

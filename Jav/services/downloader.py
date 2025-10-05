@@ -72,7 +72,7 @@ def download_torrent(
         progress_cb: Optional progress callback
         api_title: Optional API title to use for the saved filename
     """
-    if not LIBTORRENT_AVAILABLE:
+    if not LIBTORRENT_AVAILABLE or lt is None:
         LOG.error("libtorrent is not available. Cannot download torrents.")
         LOG.error("Please install Visual C++ Redistributables and run: pip install python-libtorrent")
         return None

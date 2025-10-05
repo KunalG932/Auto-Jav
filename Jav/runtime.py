@@ -95,18 +95,8 @@ async def main():
             bot.add_handler(MessageHandler(failed_command, filters.command("failed") & owner_filter))
             bot.add_handler(MessageHandler(start_command, filters.command("start") & filters.private))
             
-            if file_client:
-                try:
-                    file_client.add_handler(MessageHandler(alive_command, filters.command("alive") & owner_filter))
-                    file_client.add_handler(MessageHandler(logs_command, filters.command("logs") & owner_filter))
-                    file_client.add_handler(MessageHandler(status_command, filters.command("status") & owner_filter))
-                    file_client.add_handler(MessageHandler(stats_command, filters.command("stats") & owner_filter))
-                    file_client.add_handler(MessageHandler(broadcast_command, filters.command("broadcast") & owner_filter))
-                    file_client.add_handler(MessageHandler(failed_command, filters.command("failed") & owner_filter))
-                    file_client.add_handler(MessageHandler(start_command, filters.command("start") & filters.private))
-                    LOG.info("✅ Command handlers registered on file client")
-                except Exception as e:
-                    LOG.warning(f"Failed to register handlers on file_client: {e}")
+            # Note: file_client is only used for file operations, not command handling
+            # All commands are handled by the main bot only
             LOG.info("✅ Command handlers registered on main bot")
         except Exception as e:
             LOG.critical(f"Failed to register handlers on bot: {e}")
