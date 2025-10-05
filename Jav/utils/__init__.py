@@ -5,6 +5,7 @@ This package contains utility functions and modules including:
 - translate_to_english: Translate text to English using Google Translate
 - telegraph: Telegraph integration for video previews
 - common: Shared utilities (FloodWait handling, thumbnail download, file cleanup)
+- buttons: Unified button utilities for Telegram messages
 """
 
 import random
@@ -18,6 +19,10 @@ from .common import (
     cleanup_directory,
     get_fallback_thumbnail,
     download_thumbnail_with_fallback,
+)
+from .buttons import (
+    add_download_buttons,
+    add_source_and_magnet_buttons,
 )
 
 _ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890"
@@ -51,4 +56,6 @@ __all__ = [
     'cleanup_directory',
     'get_fallback_thumbnail',
     'download_thumbnail_with_fallback',
+    'add_download_buttons',
+    'add_source_and_magnet_buttons',
 ]

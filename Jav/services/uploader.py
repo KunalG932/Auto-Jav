@@ -132,18 +132,12 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     return msg
 
 async def add_download_button(bot, message: Message, bot_username: str, file_hash: str) -> None:
-    """Add download button to message with automatic FloodWait handling."""
-    from ..utils import handle_flood_wait
+    """Add download button to message (wrapper for backward compatibility)."""
+    from ..utils import add_download_buttons
     
-    markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗡𝗢𝗪", url=f"https://t.me/{bot_username}?start={file_hash}")]]
+    await add_download_buttons(
+        bot,
+        message,
+        bot_username,
+        file_hash=file_hash
     )
-    
-    try:
-        await handle_flood_wait(
-            message.edit_reply_markup,
-            markup,
-            operation_name="add download button"
-        )
-    except Exception as e:
-        LOG.exception(f"add_download_button error: {e}")

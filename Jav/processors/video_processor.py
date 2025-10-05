@@ -453,42 +453,19 @@ async def post_to_main_channel(
                     asyncio.create_task(_send_sticker_async(sticker_id, mid))
         except Exception:
             pass        
+        # Add download buttons (part buttons or single button) with Telegraph preview
         try:
             if main_msg is not None:
-                if part_hashes and len(part_hashes) >= 2:
-                    # Build keyboard buttons
-                    buttons = [[
-                        InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗣𝗔𝗥𝗧 𝟭", url=f"https://t.me/{bot_username}?start={part_hashes[0]}"),
-                        InlineKeyboardButton(text="𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗 𝗣𝗔𝗥𝗧 𝟮", url=f"https://t.me/{bot_username}?start={part_hashes[1]}")
-                    ]]
-                    # Add Telegraph preview button if available
-                    if telegraph_url:
-                        buttons.append([InlineKeyboardButton(text="Video Preview", url=telegraph_url)])
-                    kb = InlineKeyboardMarkup(buttons)
-                    chat_id = getattr(main_msg, 'chat', None)
-                    mid = getattr(main_msg, 'id', None)
-                    if chat_id is not None and mid is not None:
-                        try:
-                            await bot_client.edit_message_reply_markup(
-                                chat_id=chat_id.id if hasattr(chat_id, 'id') else chat_id,
-                                message_id=mid,
-                                reply_markup=kb
-                            )
-                        except errors.FloodWait as fw:
-                            wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
-                            LOG.warning(f"FloodWait when editing reply markup: sleeping for {wait_time} seconds")
-                            await asyncio.sleep(float(wait_time))
-                            try:
-                                await bot_client.edit_message_reply_markup(
-                                    chat_id=chat_id.id if hasattr(chat_id, 'id') else chat_id,
-                                    message_id=mid,
-                                    reply_markup=kb
-                                )
-                            except Exception:
-                                pass
-                else:
-                    if file_hash:
-                        await add_download_button(bot_client, main_msg, bot_username, file_hash)
+                from ..utils import add_download_buttons
+                
+                await add_download_buttons(
+                    bot_client,
+                    main_msg,
+                    bot_username,
+                    file_hash=file_hash,
+                    part_hashes=part_hashes if part_hashes and len(part_hashes) >= 2 else None,
+                    telegraph_url=telegraph_url
+                )
         except Exception as e:
             LOG.warning(f"Failed to add download button(s): {e}")
 
