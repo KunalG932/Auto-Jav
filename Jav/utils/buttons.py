@@ -84,16 +84,20 @@ async def add_download_buttons(
             buttons.append(download_row)
             LOG.debug("Added single download button")
         
-        # Add Telegraph preview button if URL provided
+        # Add Telegraph preview and backup buttons if URL provided
         if telegraph_url:
             preview_row = [
                 InlineKeyboardButton(
-                    text="📺 Video Preview",
+                    text="𝗩𝗜𝗗𝗘𝗢 𝗣𝗥𝗘𝗩𝗜𝗘𝗪",
                     url=telegraph_url
+                ),
+                InlineKeyboardButton(
+                    text="𝗕𝗔𝗖𝗞𝗨𝗣",
+                    url="https://t.me/Wyvern_Gateway_Bot?start=req_LTEwMDMxMjI5MDg0NjE"
                 )
             ]
             buttons.append(preview_row)
-            LOG.debug("Added Telegraph preview button")
+            LOG.debug("Added Telegraph preview and backup buttons")
         
         # Add any custom buttons
         if additional_buttons:
