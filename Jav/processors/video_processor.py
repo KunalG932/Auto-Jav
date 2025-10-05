@@ -56,21 +56,37 @@ async def process_video_download(
                     await bot_client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
                 except Exception:
                     pass
+            except Exception as e:
+                # Silently skip timeouts and other errors to avoid spam
+                if "timed out" not in str(e).lower():
+                    LOG.debug(f"Edit message error: {e}")
         except Exception:
             pass
     
     loop = asyncio.get_event_loop()
     last_edit_ts = 0.0
+    last_progress_pct = 0.0
 
     def _progress_cb(stats: Dict[str, float]):
-        nonlocal last_edit_ts
+        nonlocal last_edit_ts, last_progress_pct
         try:
             now = time.time()
-            if stats.get("stage") != "completed" and (now - last_edit_ts) < 3:
-                return
-            last_edit_ts = now
             stage = stats.get("stage", "downloading")
             pct = stats.get("progress_pct", 0.0)
+            
+            # Only update if:
+            # 1. Stage is completed, OR
+            # 2. At least 10 seconds passed since last update, OR
+            # 3. Progress changed by at least 5%
+            time_diff = now - last_edit_ts
+            progress_diff = abs(pct - last_progress_pct)
+            
+            if stage != "completed" and time_diff < 10 and progress_diff < 5.0:
+                return
+                
+            last_edit_ts = now
+            last_progress_pct = pct
+            
             down = stats.get("down_rate_kbs", 0.0)
             peers = int(stats.get("peers", 0.0))
             elapsed = int(stats.get("elapsed", 0.0))
@@ -377,11 +393,18 @@ async def post_to_main_channel(
             except Exception as tg_error:
                 LOG.error(f"Error creating Telegraph preview: {tg_error}", exc_info=True)
 
-        LOG.info("📥 Downloading thumbnail from API...")
-        thumb_image = await generate_thumbnail(item)
+        # Use default thumbnail from AAB/utils/thumb.jpeg
+        default_thumb = "AAB/utils/thumb.jpeg"
+        thumb_image = None
         
-        if thumb_image and os.path.exists(thumb_image):
-            LOG.info(f"✅ Thumbnail ready: {thumb_image}")
+        if os.path.exists(default_thumb):
+            thumb_image = default_thumb
+            LOG.info(f"✅ Using default thumbnail: {thumb_image}")
+        else:
+            LOG.warning(f"⚠️ Default thumbnail not found at: {default_thumb}")
+        
+        # Post to main channel with thumbnail
+        if thumb_image:
             try:
                 LOG.info(f"📤 Posting to main channel with thumbnail...")
                 main_msg = await bot_client.send_photo(
