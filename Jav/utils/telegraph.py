@@ -124,23 +124,21 @@ def create_telegraph_preview(
         poster = TelegraphPoster(use_api=True)
         poster.create_api_token('JAV Bot', 'JAV Preview', 'https://t.me/AutoMangaCampus')
         
-        # Build HTML content
+        # Build HTML content with proper image handling
         html_parts = []
         
         # Add description if provided
         if description:
             html_parts.append(f"<p><strong>{description}</strong></p>")
         
-        html_parts.append("<p>Video Preview Screenshots:</p>")
+        html_parts.append("<p>📸 Video Preview Screenshots:</p>")
         
-        # Upload and add screenshots
+        # Add screenshots with proper HTML img tags
+        # TelegraphPoster will handle the image upload when we pass local file paths
         for idx, screenshot_path in enumerate(screenshots, 1):
             try:
-                # Upload image to Telegraph
-                with open(screenshot_path, 'rb') as img_file:
-                    img_data = img_file.read()
-                
-                # TelegraphPoster handles image upload
+                # TelegraphPoster can handle local file paths in img tags
+                # It will upload them automatically when posting
                 img_tag = f'<img src="{screenshot_path}"/>'
                 html_parts.append(img_tag)
                 
@@ -154,21 +152,49 @@ def create_telegraph_preview(
             LOG.error("No images added to Telegraph page")
             return None
         
-        # Create the page
+        # Create the page - TelegraphPoster will upload images and return the page
         html_content = "\n".join(html_parts)
         
         try:
-            telegraph_url = poster.post(
+            LOG.debug(f"Posting to Telegraph with content length: {len(html_content)}")
+            
+            telegraph_response = poster.post(
                 title=title[:256],  # Telegraph title limit
                 author='JAV Bot',
                 text=html_content
             )
             
-            # Ensure we return a string URL
-            if isinstance(telegraph_url, str):
+            LOG.debug(f"Telegraph response type: {type(telegraph_response)}, value: {telegraph_response}")
+            
+            # Handle different response types
+            telegraph_url = None
+            if isinstance(telegraph_response, str):
+                # Direct URL string
+                telegraph_url = telegraph_response
+                LOG.debug("Got string URL directly")
+            elif isinstance(telegraph_response, dict):
+                # Dictionary response - extract URL
+                # Common keys: 'url', 'path', 'link', 'result'
+                if 'result' in telegraph_response and isinstance(telegraph_response['result'], dict):
+                    result = telegraph_response['result']
+                    telegraph_url = result.get('url') or result.get('path')
+                else:
+                    telegraph_url = (
+                        telegraph_response.get('url') or 
+                        telegraph_response.get('path') or
+                        telegraph_response.get('link')
+                    )
+                    
+                # If path is returned, construct full URL
+                if telegraph_url and not telegraph_url.startswith('http'):
+                    telegraph_url = f"https://telegra.ph/{telegraph_url.lstrip('/')}"
+                    
+                LOG.debug(f"Extracted URL from dict: {telegraph_url}")
+            
+            if telegraph_url and isinstance(telegraph_url, str):
                 LOG.info(f"✅ Telegraph preview created: {telegraph_url}")
             else:
-                LOG.warning(f"Unexpected Telegraph response type: {type(telegraph_url)}")
+                LOG.error(f"Could not extract URL from Telegraph response. Type: {type(telegraph_response)}, Keys: {telegraph_response.keys() if isinstance(telegraph_response, dict) else 'N/A'}")
                 return None
             
             # Cleanup screenshots
