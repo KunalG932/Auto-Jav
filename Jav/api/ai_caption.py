@@ -71,9 +71,15 @@ def fetch_and_format(text: str, timeout: int = 10) -> Optional[str]:
         LOG.error(f"Error in fetch_and_format: {e}")
         return None
 
-def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10) -> Optional[str]:
+def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10, max_retries: int = 3) -> Optional[str]:
+    """
+    Call AI API with retry logic and exponential backoff to handle rate limits.
+    """
+    import time
+    
     if not prompt or not isinstance(prompt, str):
         return None
+    
     sanitized_prompt = sanitize_input(prompt)
     url = "https://lexica.qewertyy.dev/models"
     system_role = "You are a seductive and witty caption creator💋." if mode == "caption" else "You are a creative adult film title generator🎬."
@@ -90,26 +96,61 @@ def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10) -> Option
             {"role": "user", "content": sanitized_prompt},
         ],
     }
-    try:
-        r = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=timeout)
-        r.raise_for_status()
-        data = r.json()
-        return data.get("content") or data.get("message")
-    except requests.exceptions.Timeout:
-        LOG.warning(f"AI API request timed out after {timeout}s")
-        return None
-    except requests.exceptions.HTTPError as e:
-        LOG.warning(f"AI API HTTP error: {e.response.status_code if hasattr(e, 'response') else e}")
-        return None
-    except requests.exceptions.RequestException as e:
-        LOG.warning(f"AI API network error: {e}")
-        return None
-    except (ValueError, KeyError) as e:
-        LOG.warning(f"AI API response parsing error: {e}")
-        return None
-    except Exception as e:
-        LOG.error(f"Unexpected AI API error: {e}", exc_info=True)
-        return None
+    
+    for attempt in range(max_retries):
+        try:
+            r = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=timeout)
+            r.raise_for_status()
+            data = r.json()
+            result = data.get("content") or data.get("message")
+            
+            # Add delay after successful request to avoid rate limits
+            time.sleep(2)  # 2 second delay between requests
+            
+            return result
+            
+        except requests.exceptions.Timeout:
+            LOG.warning(f"AI API request timed out after {timeout}s (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                LOG.info(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                return None
+                
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if hasattr(e, 'response') and e.response else 'unknown'
+            LOG.warning(f"AI API HTTP error: {status_code} (attempt {attempt + 1}/{max_retries})")
+            
+            # Handle rate limiting (429) and server errors (500, 502, 503)
+            if status_code in [429, 500, 502, 503]:
+                if attempt < max_retries - 1:
+                    wait_time = 3 ** attempt  # Exponential backoff: 3s, 9s, 27s
+                    LOG.info(f"Rate limited or server error. Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                else:
+                    LOG.error(f"Max retries reached for HTTP {status_code}")
+                    return None
+            else:
+                return None
+                
+        except requests.exceptions.RequestException as e:
+            LOG.warning(f"AI API network error: {e} (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                time.sleep(wait_time)
+            else:
+                return None
+                
+        except (ValueError, KeyError) as e:
+            LOG.warning(f"AI API response parsing error: {e}")
+            return None
+            
+        except Exception as e:
+            LOG.error(f"Unexpected AI API error: {e}", exc_info=True)
+            return None
+    
+    return None
 
 def get_video_duration(file_path: str) -> Optional[str]:
     if not os.path.exists(file_path):
