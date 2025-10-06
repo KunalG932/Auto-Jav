@@ -197,7 +197,6 @@ def create_enhanced_caption(title: str, item: Dict[str, Any], video_path: Option
         f"**➪ Episode:-** __01 [{duration}]__",
         f"**➪ Subtitle:-** __English✅__",
         f"**➪ Rating:-** __{rating}/10__",
-        f"**
         "",
         f"> {description}",
         "",
