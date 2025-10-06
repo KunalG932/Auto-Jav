@@ -35,11 +35,11 @@ class Settings:
     main_bot_token: str = os.getenv("MAIN_BOT_TOKEN", "")
     client_bot_token: str = os.getenv("CLIENT_BOT_TOKEN", "")
 
-    check_interval_sec: int = int(os.getenv("CHECK_INTERVAL_SEC", "300"))
+    check_interval_sec: int = int(os.getenv("CHECK_INTERVAL_SEC", "600"))
     api_endpoint: str = os.getenv("JAV_API_URL", "https://jav-api-w4od.onrender.com/api/latest?limit=10&random_pages=true&translate=true")
-    api_timeout_sec: int = int(os.getenv("JAV_API_TIMEOUT_SEC", "120"))
+    api_timeout_sec: int = int(os.getenv("JAV_API_TIMEOUT_SEC", "300")) # 5 min
     api_retries: int = int(os.getenv("JAV_API_RETRIES", "5"))
-    api_backoff_sec: int = int(os.getenv("JAV_API_BACKOFF_SEC", "30"))
+    api_backoff_sec: int = int(os.getenv("JAV_API_BACKOFF_SEC", "60"))
 
     torrent_metadata_timeout_sec: int = int(os.getenv("TORRENT_METADATA_TIMEOUT_SEC", "90"))
     torrent_stall_timeout_sec: int = int(os.getenv("TORRENT_STALL_TIMEOUT_SEC", "300"))
