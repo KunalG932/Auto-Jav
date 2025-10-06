@@ -9,7 +9,6 @@ from ..utils import translate_to_english
 LOG = logging.getLogger("Jav")
 
 def translate_item_fields(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Translate specific fields in item to English if they contain non-English text."""
     try:
         if 'title' in item and item['title']:
             translated_title = translate_to_english(str(item['title']))
@@ -94,7 +93,6 @@ def fetch_jav() -> Optional[List[Dict[str, Any]]]:
 
     LOG.info(f"Fetched {len(data)} items from API")
     
-    # Translate items to English
     try:
         translated_data = []
         for item in data:

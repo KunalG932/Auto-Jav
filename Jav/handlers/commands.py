@@ -94,9 +94,6 @@ async def start_command(client: Client, message: Message):
         await message.reply_text("❌ An error occurred while processing your request")
 
 async def stats_command(client: Client, message: Message):
-    """
-    Admin command to show bot statistics including total users.
-    """
     try:
         total_users = get_total_users()
         working = is_working()
@@ -118,12 +115,7 @@ async def stats_command(client: Client, message: Message):
         await message.reply_text("❌ Error fetching statistics")
 
 async def broadcast_command(client: Client, message: Message):
-    """
-    Admin command to broadcast a message to all users.
-    Reply to a message with /broadcast to forward it to all users.
-    """
     try:
-        # Check if message is a reply
         if not message.reply_to_message:
             await message.reply_text(
                 "❌ Please reply to a message with /broadcast to forward it to all users.\n\n"
@@ -131,35 +123,28 @@ async def broadcast_command(client: Client, message: Message):
             )
             return
         
-        # Get all user IDs
         user_ids = get_all_user_ids()
         
         if not user_ids:
             await message.reply_text("❌ No users found in database.")
             return
         
-        # Show progress message
         status_msg = await message.reply_text(
             f"📢 Starting broadcast to **{len(user_ids)}** users...\n\n"
             f"⏳ Please wait..."
         )
         
-        # Broadcast statistics
         success_count = 0
         failed_count = 0
         blocked_count = 0
         
-        # Get the message to broadcast
         broadcast_msg = message.reply_to_message
         
-        # Broadcast to all users
         for i, user_id in enumerate(user_ids):
             try:
-                # Forward the message to user
                 await broadcast_msg.copy(user_id)
                 success_count += 1
                 
-                # Update progress every 50 users
                 if (i + 1) % 50 == 0:
                     await status_msg.edit_text(
                         f"📢 Broadcasting...\n\n"
@@ -169,7 +154,6 @@ async def broadcast_command(client: Client, message: Message):
                         f"📊 Progress: {i + 1}/{len(user_ids)}"
                     )
                 
-                # Small delay to avoid flooding
                 await asyncio.sleep(0.05)
                 
             except Exception as e:
@@ -180,7 +164,6 @@ async def broadcast_command(client: Client, message: Message):
                     failed_count += 1
                     LOG.warning(f"Failed to broadcast to user {user_id}: {e}")
         
-        # Final statistics
         final_text = (
             "📢 **Broadcast Completed!**\n\n"
             f"✅ Successfully sent: **{success_count}**\n"
@@ -198,20 +181,12 @@ async def broadcast_command(client: Client, message: Message):
         await message.reply_text(f"❌ Error during broadcast: {str(e)}")
 
 async def failed_command(client: Client, message: Message):
-    """
-    Admin command to view and manage failed downloads.
-    Usage: 
-      /failed - Show list of failed downloads
-      /failed clear - Clear all failed downloads
-      /failed remove <title> - Remove specific failed download
-    """
     try:
         text = (message.text or '').strip().split(maxsplit=2)
         command = text[0] if len(text) > 0 else '/failed'
         action = text[1].lower() if len(text) > 1 else None
         param = text[2] if len(text) > 2 else None
         
-        # Clear all failed downloads
         if action == 'clear':
             try:
                 result = failed_downloads.delete_many({})
@@ -226,7 +201,6 @@ async def failed_command(client: Client, message: Message):
                 await message.reply_text(f"❌ Error clearing failed downloads: {str(e)}")
                 return
         
-        # Remove specific failed download
         if action == 'remove' and param:
             try:
                 remove_failed_download(param)
@@ -240,7 +214,6 @@ async def failed_command(client: Client, message: Message):
                 await message.reply_text(f"❌ Error removing failed download: {str(e)}")
                 return
         
-        # List all failed downloads
         try:
             failed_list = list(failed_downloads.find({}).sort('failed_at', -1).limit(50))
             
@@ -258,7 +231,6 @@ async def failed_command(client: Client, message: Message):
                 reason = item.get('reason', 'Unknown reason')
                 failed_date = item.get('failed_date', 'Unknown date')
                 
-                # Truncate title if too long
                 if len(title) > 50:
                     title = title[:47] + "..."
                 

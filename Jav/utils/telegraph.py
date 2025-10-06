@@ -1,6 +1,3 @@
-"""
-Telegraph utility module for creating video preview pages with screenshots.
-"""
 
 import os
 import logging
@@ -12,24 +9,13 @@ from html_telegraph_poster import TelegraphPoster
 
 LOG = logging.getLogger("Jav")
 
-
 def upload_image_to_host(image_path: str) -> Optional[str]:
-    """
-    Upload an image to envs.sh and return the URL.
-    
-    Args:
-        image_path: Path to the image file
-        
-    Returns:
-        URL of the uploaded image, or None if failed
-    """
     try:
         with open(image_path, 'rb') as img_file:
             files = {'file': img_file}
             response = requests.post('https://envs.sh', files=files, timeout=30)
             response.raise_for_status()
             
-            # envs.sh returns the direct URL in the response text
             image_url = response.text.strip()
             
             if image_url and image_url.startswith('http'):
@@ -43,18 +29,7 @@ def upload_image_to_host(image_path: str) -> Optional[str]:
         LOG.error(f"Failed to upload image to host: {e}")
         return None
 
-
 def extract_video_screenshots(video_path: str, num_screenshots: int = 6) -> List[str]:
-    """
-    Extract screenshots from video at regular intervals.
-    
-    Args:
-        video_path: Path to the video file
-        num_screenshots: Number of screenshots to extract (default: 6)
-        
-    Returns:
-        List of paths to extracted screenshot files
-    """
     screenshots = []
     
     if not os.path.exists(video_path):
@@ -62,7 +37,6 @@ def extract_video_screenshots(video_path: str, num_screenshots: int = 6) -> List
         return screenshots
     
     try:
-        # Get video duration
         cmd = [
             'ffprobe',
             '-v', 'error',
@@ -82,11 +56,8 @@ def extract_video_screenshots(video_path: str, num_screenshots: int = 6) -> List
             LOG.error(f"Invalid video duration: {duration}")
             return screenshots
         
-        # Create temp directory for screenshots
         temp_dir = tempfile.mkdtemp(prefix="video_preview_")
         
-        # Calculate interval between screenshots
-        # Skip first and last 10% to avoid intros/credits
         start_time = duration * 0.1
         end_time = duration * 0.9
         interval = (end_time - start_time) / (num_screenshots + 1)
@@ -95,7 +66,6 @@ def extract_video_screenshots(video_path: str, num_screenshots: int = 6) -> List
             timestamp = start_time + (i + 1) * interval
             screenshot_path = os.path.join(temp_dir, f"screenshot_{i+1:02d}.jpg")
             
-            # Extract screenshot using ffmpeg
             cmd = [
                 'ffmpeg',
                 '-ss', str(timestamp),
@@ -123,59 +93,39 @@ def extract_video_screenshots(video_path: str, num_screenshots: int = 6) -> List
     
     return screenshots
 
-
 def create_telegraph_preview(
     video_path: str,
     title: str,
     description: Optional[str] = None,
     num_screenshots: int = 6
 ) -> Optional[str]:
-    """
-    Create a Telegraph page with video preview screenshots.
-    
-    Args:
-        video_path: Path to the video file
-        title: Title for the Telegraph page
-        description: Optional description text
-        num_screenshots: Number of screenshots to include (default: 6)
-        
-    Returns:
-        URL of the created Telegraph page, or None if failed
-    """
     try:
         LOG.info(f"Creating Telegraph preview for: {title}")
         
-        # Extract screenshots
         screenshots = extract_video_screenshots(video_path, num_screenshots)
         
         if not screenshots:
             LOG.warning("No screenshots extracted, cannot create Telegraph page")
             return None
         
-        # Create Telegraph poster
         poster = TelegraphPoster(use_api=True)
         poster.create_api_token('JAV Bot', 'JAV Preview', 'https://t.me/AutoMangaCampus')
         
-        # Build HTML content with uploaded image URLs
         html_parts = []
         
-        # Add description if provided
         if description:
             html_parts.append(f"<p><strong>{description}</strong></p>")
         
         html_parts.append("<p>📸 Video Preview Screenshots:</p>")
         
-        # Upload screenshots to image host and add to Telegraph page
         uploaded_count = 0
         for idx, screenshot_path in enumerate(screenshots, 1):
             try:
                 LOG.info(f"Uploading screenshot {idx}/{len(screenshots)} to image host...")
                 
-                # Upload image to envs.sh
                 image_url = upload_image_to_host(screenshot_path)
                 
                 if image_url:
-                    # Add image with the uploaded URL
                     img_tag = f'<img src="{image_url}"/>'
                     html_parts.append(img_tag)
                     uploaded_count += 1
@@ -193,29 +143,24 @@ def create_telegraph_preview(
         
         LOG.info(f"Successfully uploaded {uploaded_count}/{len(screenshots)} screenshots")
         
-        # Create the Telegraph page with uploaded image URLs
         html_content = "\n".join(html_parts)
         
         try:
             LOG.debug(f"Posting to Telegraph with content length: {len(html_content)}")
             
             telegraph_response = poster.post(
-                title=title[:256],  # Telegraph title limit
+                title=title[:256],
                 author='JAV Bot',
                 text=html_content
             )
             
             LOG.debug(f"Telegraph response type: {type(telegraph_response)}, value: {telegraph_response}")
             
-            # Handle different response types
             telegraph_url = None
             if isinstance(telegraph_response, str):
-                # Direct URL string
                 telegraph_url = telegraph_response
                 LOG.debug("Got string URL directly")
             elif isinstance(telegraph_response, dict):
-                # Dictionary response - extract URL
-                # Common keys: 'url', 'path', 'link', 'result'
                 if 'result' in telegraph_response and isinstance(telegraph_response['result'], dict):
                     result = telegraph_response['result']
                     telegraph_url = result.get('url') or result.get('path')
@@ -226,7 +171,6 @@ def create_telegraph_preview(
                         telegraph_response.get('link')
                     )
                     
-                # If path is returned, construct full URL
                 if telegraph_url and not telegraph_url.startswith('http'):
                     telegraph_url = f"https://telegra.ph/{telegraph_url.lstrip('/')}"
                     
@@ -238,13 +182,11 @@ def create_telegraph_preview(
                 LOG.error(f"Could not extract URL from Telegraph response. Type: {type(telegraph_response)}, Keys: {telegraph_response.keys() if isinstance(telegraph_response, dict) else 'N/A'}")
                 return None
             
-            # Cleanup screenshots
             for screenshot in screenshots:
                 try:
                     if os.path.exists(screenshot):
                         os.remove(screenshot)
                         
-                    # Also try to remove the temp directory
                     temp_dir = os.path.dirname(screenshot)
                     if os.path.exists(temp_dir) and not os.listdir(temp_dir):
                         os.rmdir(temp_dir)
@@ -261,25 +203,12 @@ def create_telegraph_preview(
         LOG.error(f"Error creating Telegraph preview: {e}", exc_info=True)
         return None
 
-
 async def create_telegraph_preview_async(
     video_path: str,
     title: str,
     description: Optional[str] = None,
     num_screenshots: int = 6
 ) -> Optional[str]:
-    """
-    Async wrapper for creating Telegraph preview.
-    
-    Args:
-        video_path: Path to the video file
-        title: Title for the Telegraph page
-        description: Optional description text
-        num_screenshots: Number of screenshots to include (default: 6)
-        
-    Returns:
-        URL of the created Telegraph page, or None if failed
-    """
     import asyncio
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(

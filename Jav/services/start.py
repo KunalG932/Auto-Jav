@@ -7,7 +7,6 @@ img = "AAB/utils/thumb.jpeg"
 
 async def start_cmd(client: Client, message: Message):
     
-    # Track user in database
     try:
         user = message.from_user
         if user:

@@ -64,14 +64,6 @@ def download_torrent(
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     api_title: Optional[str] = None
 ) -> Optional[Dict[str, str]]:
-    """
-    Download torrent and use API title for filename if provided.
-    
-    Args:
-        link: Magnet link or torrent URL
-        progress_cb: Optional progress callback
-        api_title: Optional API title to use for the saved filename
-    """
     if not LIBTORRENT_AVAILABLE or lt is None:
         LOG.error("libtorrent is not available. Cannot download torrents.")
         LOG.error("Please install Visual C++ Redistributables and run: pip install python-libtorrent")
@@ -154,7 +146,6 @@ def download_torrent(
         torrent_name = handle.name()
         torrent_name = translate_to_english(torrent_name)
         
-        # Use API title if provided (recommended for consistency)
         if api_title:
             display_name = api_title
             LOG.info(f"Using API title for filename: {api_title}")
@@ -225,13 +216,10 @@ def download_torrent(
 
             time.sleep(SETTINGS.download_update_interval_sec)
 
-        # Get file extension from largest file
         original_ext = os.path.splitext(largest_file)[1] or '.mp4'
         
-        # Build the actual download path (where torrent saved the file)
         original_torrent_path = os.path.join(SAVE_PATH, largest_file)
         
-        # Use API title for the saved filename if provided
         if api_title:
             safe_name = sanitize_filename(api_title) + original_ext
             target_path = os.path.join(SAVE_PATH, safe_name)
@@ -241,7 +229,6 @@ def download_torrent(
             target_path = os.path.join(SAVE_PATH, safe_name)
             LOG.info(f"Using torrent filename: {safe_name}")
 
-        # Rename file if API title is provided and file exists
         if api_title and os.path.exists(original_torrent_path) and original_torrent_path != target_path:
             try:
                 LOG.info(f"🔄 Renaming file...")
@@ -256,7 +243,6 @@ def download_torrent(
         else:
             full_path = original_torrent_path
 
-        # If file doesn't exist at expected location, search for it
         if not os.path.exists(full_path):
             LOG.warning(f"File not found at expected path: {full_path}")
             LOG.info(f"Searching for video file in: {SAVE_PATH}")
@@ -277,7 +263,6 @@ def download_torrent(
             
             if found_file:
                 LOG.info(f"Found video file: {found_file} ({found_size / (1024*1024):.2f} MB)")
-                # Rename found file to API title if provided
                 if api_title:
                     try:
                         new_path = os.path.join(SAVE_PATH, safe_name)

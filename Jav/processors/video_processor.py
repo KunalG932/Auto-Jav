@@ -1,4 +1,3 @@
-# 
 
 import os
 import time
@@ -35,7 +34,6 @@ async def process_video_download(
     update_msg = await bot_client.send_message(SETTINGS.production_chat, f"📥 Downloading: {title}")
 
     async def safe_edit(text: str):
-        """Safely edit message with FloodWait handling."""
         from ..utils import handle_flood_wait
         
         try:
@@ -58,7 +56,6 @@ async def process_video_download(
                     operation_name="edit progress message"
                 )
             except Exception as e:
-                # Log non-timeout errors at warning level for better visibility
                 error_msg = str(e).lower()
                 if "timed out" in error_msg:
                     LOG.debug(f"Edit message timeout (expected): {e}")
@@ -80,10 +77,6 @@ async def process_video_download(
             stage = stats.get("stage", "downloading")
             pct = stats.get("progress_pct", 0.0)
             
-            # Only update if:
-            # 1. Stage is completed, OR
-            # 2. At least 10 seconds passed since last update, OR
-            # 3. Progress changed by at least 5%
             time_diff = now - last_edit_ts
             progress_diff = abs(pct - last_progress_pct)
             
@@ -132,7 +125,6 @@ async def process_video_download(
                     from ..services.encode import FFEncoder
                     from ..services.downloader import sanitize_filename
                     
-                    # Use sanitized API title for encoded filename
                     output_name = f"{sanitize_filename(title)}_encoded.mkv"
                     
                     encoder = FFEncoder(upload_path, output_name)
@@ -206,10 +198,8 @@ async def process_video_download(
                 await post_to_main_channel(bot_client, file_client, item, caption, file_hash, part_hashes, upload_path)
                 LOG.info(f"✅ Successfully uploaded and posted: {title}")
                 
-                # Cleanup all files after successful upload
                 await cleanup_files(info['file'], upload_path)
                 
-                # Also cleanup downloads and encode directories
                 await cleanup_directories()
             else:
                 LOG.error(f"❌ Upload failed for: {title}")
@@ -221,7 +211,6 @@ async def process_video_download(
             
     else:
         LOG.error(f"❌ Download failed - no file info returned for: {title}")
-        # Notify production chat about the failure
         try:
             await bot_client.send_message(
                 SETTINGS.production_chat,
@@ -379,7 +368,6 @@ async def post_to_main_channel(
         post_caption = create_enhanced_caption(title, item, video_path)
         LOG.info(f"Caption generated: {post_caption[:100]}...")
         
-        # Generate Telegraph preview with video screenshots
         telegraph_url = None
         if video_path and os.path.exists(video_path):
             try:
@@ -397,7 +385,6 @@ async def post_to_main_channel(
             except Exception as tg_error:
                 LOG.error(f"Error creating Telegraph preview: {tg_error}", exc_info=True)
 
-        # Use default thumbnail from AAB/utils/thumb.jpeg
         default_thumb = "AAB/utils/thumb.jpeg"
         thumb_image = None
         
@@ -407,7 +394,6 @@ async def post_to_main_channel(
         else:
             LOG.warning(f"⚠️ Default thumbnail not found at: {default_thumb}")
         
-        # Post to main channel with thumbnail
         if thumb_image:
             try:
                 from ..utils import handle_flood_wait
@@ -453,7 +439,6 @@ async def post_to_main_channel(
                     asyncio.create_task(_send_sticker_async(sticker_id, mid))
         except Exception:
             pass        
-        # Add download buttons (part buttons or single button) with Telegraph preview
         try:
             if main_msg is not None:
                 from ..utils import add_download_buttons
@@ -473,10 +458,6 @@ async def post_to_main_channel(
         LOG.error(f"Failed to post to main channel: {e}")
 
 async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
-    """
-    Download thumbnail from API and return the local file path.
-    Returns None if download fails.
-    """
     from ..utils import download_thumbnail
     
     thumbnail_url = item.get('thumbnail')
@@ -488,7 +469,6 @@ async def generate_thumbnail(item: Dict[str, Any]) -> Optional[str]:
     return download_thumbnail(thumbnail_url, filename_prefix=filename_prefix)
 
 async def cleanup_files(original_file: str, processed_file: str):
-    """Clean up original and processed files after upload."""
     from ..utils import cleanup_files as cleanup_util
     
     files_to_cleanup = [original_file]
@@ -498,9 +478,6 @@ async def cleanup_files(original_file: str, processed_file: str):
     cleanup_util(*files_to_cleanup)
 
 async def cleanup_directories():
-    """
-    Cleanup downloads and encode directories after successful upload.
-    """
     from ..utils import cleanup_directory
     
     directories = ["./downloads", "./encode"]

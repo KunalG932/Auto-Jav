@@ -45,7 +45,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     else:
         doc_caption = os.path.basename(abs_path)
 
-    # Use common utility for thumbnail download with fallback
     from ..utils import download_thumbnail_with_fallback
     
     thumbnail_url = item.get('thumbnail') if item else None
@@ -101,7 +100,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
                         wait_time = int(fw.value) if isinstance(fw.value, (int, float)) else 60
                         LOG.warning(f"FloodWait during upload: sleeping for {wait_time} seconds (attempt {attempt})")
                         await asyncio.sleep(float(wait_time))
-                        # Retry after waiting
                         if attempt < attempts:
                             continue
                         raise
@@ -132,7 +130,6 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     return msg
 
 async def add_download_button(bot, message: Message, bot_username: str, file_hash: str) -> None:
-    """Add download button to message (wrapper for backward compatibility)."""
     from ..utils import add_download_buttons
     
     await add_download_buttons(

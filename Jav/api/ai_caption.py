@@ -47,18 +47,12 @@ def sanitize_input(text: str) -> str:
     return sanitized
 
 def fetch_and_format(text: str, timeout: int = 10) -> Optional[str]:
-    """
-    Legacy function for backward compatibility.
-    Calls AI API with the given text and returns formatted caption.
-    """
     if not text or not isinstance(text, str):
         return None
     
     try:
-        # Sanitize the input text
         sanitized = sanitize_input(text)
         
-        # Call AI API to generate caption
         result = call_ai_api(sanitized, mode="caption", timeout=timeout)
         
         if result:
@@ -72,9 +66,6 @@ def fetch_and_format(text: str, timeout: int = 10) -> Optional[str]:
         return None
 
 def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10, max_retries: int = 3) -> Optional[str]:
-    """
-    Call AI API with retry logic and exponential backoff to handle rate limits.
-    """
     import time
     
     if not prompt or not isinstance(prompt, str):
@@ -104,15 +95,14 @@ def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10, max_retri
             data = r.json()
             result = data.get("content") or data.get("message")
             
-            # Add delay after successful request to avoid rate limits
-            time.sleep(2)  # 2 second delay between requests
+            time.sleep(2)
             
             return result
             
         except requests.exceptions.Timeout:
             LOG.warning(f"AI API request timed out after {timeout}s (attempt {attempt + 1}/{max_retries})")
             if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                wait_time = 2 ** attempt
                 LOG.info(f"Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
             else:
@@ -122,10 +112,9 @@ def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10, max_retri
             status_code = e.response.status_code if hasattr(e, 'response') and e.response else 'unknown'
             LOG.warning(f"AI API HTTP error: {status_code} (attempt {attempt + 1}/{max_retries})")
             
-            # Handle rate limiting (429) and server errors (500, 502, 503)
             if status_code in [429, 500, 502, 503]:
                 if attempt < max_retries - 1:
-                    wait_time = 3 ** attempt  # Exponential backoff: 3s, 9s, 27s
+                    wait_time = 3 ** attempt
                     LOG.info(f"Rate limited or server error. Waiting {wait_time} seconds before retry...")
                     time.sleep(wait_time)
                 else:
@@ -208,7 +197,7 @@ def create_enhanced_caption(title: str, item: Dict[str, Any], video_path: Option
         f"**➪ Episode:-** __01 [{duration}]__",
         f"**➪ Subtitle:-** __English✅__",
         f"**➪ Rating:-** __{rating}/10__",
-        f"**#{recommendation}**",
+        f"**
         "",
         f"> {description}",
         "",

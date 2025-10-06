@@ -15,7 +15,6 @@ from .handlers.commands import set_clients
 from .processors import process_item, check_for_new_items
 from .api.api_health import warm_up_api
 
-# ---------------------------- Logging Setup ----------------------------
 LOG = logging.getLogger("Jav")
 logging.basicConfig(
     level=logging.INFO,
@@ -26,10 +25,7 @@ logging.basicConfig(
 bot: Optional[Client] = None
 file_client: Optional[Client] = None
 
-
-# ---------------------------- Worker Loop ----------------------------
 async def worker_loop():
-    """Continuously checks for new items and processes them."""
     global bot, file_client
 
     while True:
@@ -55,10 +51,7 @@ async def worker_loop():
 
         await asyncio.sleep(SETTINGS.check_interval_sec)
 
-
-# ---------------------------- Bot Initialization ----------------------------
 async def init_clients():
-    """Create and start both main and file clients."""
     try:
         bot, file_client = create_clients()
         set_clients(bot, file_client)
@@ -77,10 +70,7 @@ async def init_clients():
 
     return bot, file_client
 
-
-# ---------------------------- Handler Registration ----------------------------
 def register_handlers(bot: Client, file_client: Client):
-    """Attach command handlers to both clients."""
     owner_filter = filters.user(list(SETTINGS.owner_ids))
 
     handlers = [
@@ -102,12 +92,9 @@ def register_handlers(bot: Client, file_client: Client):
 
     LOG.info("✅ Command handlers registered")
 
-
-# ---------------------------- Main Entry ----------------------------
 async def main():
     global bot, file_client
 
-    # MongoDB connection check
     try:
         mongo_client.admin.command("ping")
         LOG.info("✅ MongoDB connected successfully")
@@ -115,17 +102,13 @@ async def main():
         LOG.critical(f"❌ MongoDB connection failed: {e}")
         return
 
-    # Initialize clients
     bot, file_client = await init_clients()
 
-    # Register handlers
     register_handlers(bot, file_client)
 
-    # Prepare folders
     os.makedirs("./downloads", exist_ok=True)
     LOG.info("✅ Downloads directory ready")
 
-    # Warm-up API
     LOG.info("🔥 Warming up API...")
     warm_up_api(max_attempts=2)
 
@@ -136,10 +119,7 @@ async def main():
     finally:
         await shutdown_clients()
 
-
-# ---------------------------- Cleanup ----------------------------
 async def shutdown_clients():
-    """Gracefully stop both clients."""
     global bot, file_client
     try:
         if file_client:
@@ -150,8 +130,6 @@ async def shutdown_clients():
     except Exception as cleanup_error:
         LOG.exception(f"Error during shutdown: {cleanup_error}")
 
-
-# ---------------------------- Runner ----------------------------
 def run():
     try:
         asyncio.run(main())

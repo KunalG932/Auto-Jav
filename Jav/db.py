@@ -51,10 +51,6 @@ def set_working(flag: bool) -> None:
     LOG.debug(f"Worker state set to {flag}")
 
 def add_user(user_id: int, name: str, username: Optional[str] = None) -> bool:
-    """
-    Add a new user to the database if not exists.
-    Returns True if user was newly added, False if already exists.
-    """
     from datetime import datetime
     
     existing = users.find_one({'user_id': user_id})
@@ -72,9 +68,6 @@ def add_user(user_id: int, name: str, username: Optional[str] = None) -> bool:
     return True
 
 def get_total_users() -> int:
-    """
-    Get total number of users in database.
-    """
     try:
         return users.count_documents({})
     except Exception as e:
@@ -82,9 +75,6 @@ def get_total_users() -> int:
         return 0
 
 def get_all_user_ids() -> list:
-    """
-    Get list of all user IDs for broadcasting.
-    """
     try:
         return [doc['user_id'] for doc in users.find({}, {'user_id': 1})]
     except Exception as e:
@@ -92,9 +82,6 @@ def get_all_user_ids() -> list:
         return []
 
 def add_failed_download(title: str, magnet: str, reason: str = "Download failed") -> None:
-    """
-    Add a failed download record to prevent re-downloading.
-    """
     from datetime import datetime
     
     try:
@@ -110,10 +97,6 @@ def add_failed_download(title: str, magnet: str, reason: str = "Download failed"
         LOG.error(f"Error adding failed download record: {e}")
 
 def is_failed_download(title: str) -> bool:
-    """
-    Check if a video has previously failed to download.
-    Returns True if it has failed before, False otherwise.
-    """
     try:
         existing = failed_downloads.find_one({'title': title})
         if existing:
@@ -125,9 +108,6 @@ def is_failed_download(title: str) -> bool:
         return False
 
 def remove_failed_download(title: str) -> None:
-    """
-    Remove a title from failed downloads (in case you want to retry manually).
-    """
     try:
         result = failed_downloads.delete_one({'title': title})
         if result.deleted_count > 0:
