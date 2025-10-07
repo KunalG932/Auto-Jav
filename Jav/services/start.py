@@ -25,9 +25,9 @@ async def start_cmd(client: Client, message: Message):
     welcome = list("WELCOME")
     welcome_row = [InlineKeyboardButton(text=ch, callback_data=f"welcome_{ch}") for ch in welcome]
 
-    main_channel_url = "https://t.me/AutoMangaCampus"
-    support_url = "https://t.me/AutoMangaCampus"
-    backup_url = "https://t.me/AutoMangaCampus"
+    main_channel_url = "https://t.me/Awakeners_Gateway_TheBot?start=req_LTEwMDI3MjI1NTcwOTY"
+    support_url = "https://t.me/Wyvern_Gateway_Bot?start=NQ=="
+    backup_url = "https://t.me/Awakeners_Gateway_TheBot?start=OA=="
 
     action_row = [
         InlineKeyboardButton("𝗖𝗛𝗔𝗡𝗡𝗘𝗟", url=main_channel_url),
@@ -41,8 +41,8 @@ async def start_cmd(client: Client, message: Message):
     kb = InlineKeyboardMarkup([welcome_row, action_row, backup_row])
 
     text = (
-        "👋 𝑯𝒆𝒚, 𝑾𝒆𝒍𝒄𝒐𝒎𝒆 𝒕𝒐 𝒕𝒉𝒆 <b>𝗝𝗔𝗩 𝗕𝗼𝘁</b> 🎉\n\n"
-        "✨ Explore unlimited fun, updates & spicy content.\n"
+        f">👋 hey, {user.mention()}🎉\n\n"
+        "I`m File Provider Bot..\n"
         "⚡ Use the buttons below to stay connected with our community!"
     )
 
