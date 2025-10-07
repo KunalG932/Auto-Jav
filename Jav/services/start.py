@@ -42,8 +42,8 @@ async def start_cmd(client: Client, message: Message):
 
     text = (
         f">👋 hey, {user.mention()}🎉\n\n"
-        "I`m File Provider Bot..\n"
-        "⚡ Use the buttons below to stay connected with our community!"
+        "I'm File Provider Bot..\n"
+        "Use the buttons below to stay connected with our community!"
     )
 
     await message.reply_photo(photo=img,caption=text, reply_markup=kb)
