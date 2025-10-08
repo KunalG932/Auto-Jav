@@ -125,7 +125,6 @@ async def process_video_download(
                     from ..services.encode import FFEncoder
                     from ..services.downloader import sanitize_filename
                     
-                    # Format with [TW] prefix and @The_Wyverns suffix
                     sanitized_title = sanitize_filename(title)
                     output_name = f"[TW] {sanitized_title} @The_Wyverns.mp4"
                     
@@ -136,11 +135,9 @@ async def process_video_download(
                         import time
                         current_time = time.time()
                         
-                        # Update every 5 seconds or at 100%
                         if current_time - last_update_time >= 5.0 or percent >= 99.9:
                             last_update_time = current_time
                             
-                            # Create progress bar
                             bar_length = 20
                             filled = int(bar_length * percent / 100)
                             bar = "█" * filled + "░" * (bar_length - filled)

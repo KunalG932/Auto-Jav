@@ -78,16 +78,13 @@ async def start_command(client: Client, message: Message):
                 await message.reply_text("❌ Could not determine destination chat id")
                 return
 
-            # Use copy_message instead of forward_messages so the forwarded tag is not shown
             copied_msg = await forwarder.copy_message(
                 chat_id=chat_id,
                 from_chat_id=SETTINGS.files_channel,
                 message_id=message_id,
-                #protect_content=True,
             )
             LOG.info(f"File copied to user {getattr(message.from_user, 'id', 'unknown')} for hash {file_hash} (no forwarded tag)")
             
-            # Send warning message about deletion
             warning_text = (
                 ">⚠️ **IMPORTANT WARNING** ⚠️\n\n"
                 "🗑️ This file will be **DELETED in 3 MINUTES**!\n\n"
@@ -96,24 +93,20 @@ async def start_command(client: Client, message: Message):
             )
             warning_msg = await message.reply_text(warning_text)
             
-            # Schedule file and warning deletion after 3 minutes
             async def delete_after_delay():
-                await asyncio.sleep(180)  # 3 minutes = 180 seconds
+                await asyncio.sleep(180)
                 try:
-                    # Delete the copied file message
                     await forwarder.delete_messages(chat_id=chat_id, message_ids=copied_msg.id)
                     LOG.info(f"Deleted file message {copied_msg.id} for user {chat_id}")
                 except Exception as del_e:
                     LOG.warning(f"Failed to delete file message: {del_e}")
                 
                 try:
-                    # Delete the warning message
                     await warning_msg.delete()
                     LOG.info(f"Deleted warning message for user {chat_id}")
                 except Exception as warn_del_e:
                     LOG.warning(f"Failed to delete warning message: {warn_del_e}")
                 
-                # Send deletion confirmation with restart button
                 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
                 
                 restart_button = InlineKeyboardMarkup([
@@ -132,7 +125,6 @@ async def start_command(client: Client, message: Message):
                 except Exception as notif_e:
                     LOG.warning(f"Failed to send deletion notification: {notif_e}")
             
-            # Run deletion task in background
             asyncio.create_task(delete_after_delay())
         except Exception as e:
             LOG.exception(f"Failed to forward message {message_id}: {e}")
@@ -308,7 +300,6 @@ async def failed_command(client: Client, message: Message):
         await message.reply_text(f"❌ Error: {str(e)}")
 
 async def queue_command(client: Client, message: Message):
-    """Show queue status and daily post limits"""
     try:
         from ..db import get_queue_size, get_posts_today, pending_queue, get_queue_stats
         from ..config import SETTINGS
@@ -319,7 +310,6 @@ async def queue_command(client: Client, message: Message):
         remaining = max(0, max_posts - posts_today)
         queue_stats = get_queue_stats()
         
-        # Get next few items in queue
         next_items = list(pending_queue.find(
             {'status': 'pending'},
             sort=[('added_at', 1)]
@@ -355,27 +345,23 @@ async def queue_command(client: Client, message: Message):
         await message.reply_text(f"❌ Error fetching queue status: {str(e)}")
 
 async def resources_command(client: Client, message: Message):
-    """Show system resource usage"""
     try:
         import psutil
         import shutil
         from datetime import datetime
         
-        # CPU and Memory
         cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
         memory_used_gb = memory.used / (1024**3)
         memory_total_gb = memory.total / (1024**3)
         memory_percent = memory.percent
         
-        # Disk usage
         disk = shutil.disk_usage('.')
         disk_used_gb = disk.used / (1024**3)
         disk_total_gb = disk.total / (1024**3)
         disk_percent = (disk.used / disk.total) * 100
         disk_free_gb = disk.free / (1024**3)
         
-        # Downloads folder size
         downloads_size = 0
         downloads_path = './downloads'
         if os.path.exists(downloads_path):
@@ -388,7 +374,6 @@ async def resources_command(client: Client, message: Message):
                         pass
         downloads_size_gb = downloads_size / (1024**3)
         
-        # Encode folder size
         encode_size = 0
         encode_path = './encode'
         if os.path.exists(encode_path):
@@ -401,7 +386,6 @@ async def resources_command(client: Client, message: Message):
                         pass
         encode_size_gb = encode_size / (1024**3)
         
-        # Database stats
         from ..db import files, users, pending_queue, failed_downloads
         total_files = files.count_documents({})
         total_users = users.count_documents({})

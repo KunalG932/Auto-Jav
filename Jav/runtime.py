@@ -34,13 +34,11 @@ async def worker_loop():
             if not is_working():
                 set_working(True)
                 try:
-                    # Check if we can post today
                     if not can_post_today():
                         queue_size = get_queue_size()
                         posts_today = get_posts_today()
                         LOG.info(f"⏸️ Daily limit reached ({posts_today}/{SETTINGS.max_posts_per_day}). Queue: {queue_size} items. Waiting...")
                     else:
-                        # First, check for new items from API
                         new_items = check_for_new_items()
                         if new_items:
                             LOG.info(f"📥 Processing {len(new_items)} new items from API")
@@ -52,7 +50,6 @@ async def worker_loop():
                         else:
                             LOG.debug("No new items from API")
                         
-                        # Then, process queue if we still have capacity
                         while can_post_today():
                             queue_item = get_next_queue_item()
                             if not queue_item:
@@ -143,7 +140,6 @@ async def main():
 
     LOG.info(f"🚀 Jav bot started! Check interval: {SETTINGS.check_interval_sec}s")
     
-    # Perform an immediate check on startup
     LOG.info("🔍 Performing initial content check...")
     try:
         set_working(True)

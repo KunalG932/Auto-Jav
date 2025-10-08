@@ -24,7 +24,6 @@ async def process_item(bot_client: Optional[Client], file_client: Optional[Clien
 
     title = get_title(item) or 'Unknown Title'
     
-    # Check daily limit first
     if not can_post_today():
         posts_today = get_posts_today()
         LOG.info(f"⏸️ Daily limit reached ({posts_today}/{SETTINGS.max_posts_per_day}). Adding to queue: {title[:50]}")

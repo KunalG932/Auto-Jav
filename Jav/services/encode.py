@@ -44,7 +44,6 @@ class FFEncoder:
 
         await aiorename(video_file, dl_npath)
         
-        # Get video duration first for progress calculation
         duration_seconds = await self._get_video_duration(dl_npath)
         LOG.info(f"Video duration: {duration_seconds}s")
 
@@ -67,7 +66,6 @@ class FFEncoder:
 
         self.__proc = await create_subprocess_shell(ffcode, stdout=PIPE, stderr=PIPE)
         
-        # Monitor encoding progress
         if self.progress_callback and duration_seconds:
             asyncio.create_task(self._monitor_progress(self.__proc.stdout, duration_seconds))
         
@@ -85,7 +83,6 @@ class FFEncoder:
             return None
     
     async def _get_video_duration(self, video_path: str) -> Optional[float]:
-        """Get video duration in seconds using ffprobe"""
         try:
             cmd = f"ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 '{video_path}'"
             proc = await create_subprocess_shell(cmd, stdout=PIPE, stderr=PIPE)
@@ -97,7 +94,6 @@ class FFEncoder:
             return None
     
     async def _monitor_progress(self, stdout, total_duration: float):
-        """Monitor FFmpeg progress and call callback with percentage"""
         try:
             buffer = ""
             while True:

@@ -40,17 +40,14 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
         LOG.error(f"Error while resolving file path: {e}")
         return None
 
-    # Format filename with [TW] prefix
     base_filename = os.path.basename(abs_path)
     formatted_filename = f">**{base_filename}**"
     
-    # Create caption with filename in blockquote and bold
     if title:
         doc_caption = f">**{base_filename}**"
     else:
         doc_caption = f">**{base_filename}**"
 
-    # Use default thumbnail only (not from API)
     thumb_path = SETTINGS.thumbnail_path if os.path.exists(SETTINGS.thumbnail_path) else None
     if thumb_path:
         LOG.info(f"Using default thumbnail: {thumb_path}")

@@ -122,9 +122,7 @@ def remove_failed_download(title: str) -> None:
     except Exception as e:
         LOG.error(f"Error removing failed download: {e}")
 
-# Daily post limit functions
 def get_posts_today() -> int:
-    """Get number of posts made today"""
     from datetime import datetime
     
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -134,7 +132,6 @@ def get_posts_today() -> int:
     return count
 
 def reset_daily_post_count():
-    """Reset daily post counter"""
     from datetime import datetime
     
     today = datetime.now().strftime('%Y-%m-%d')
@@ -146,13 +143,11 @@ def reset_daily_post_count():
     LOG.info("📅 Daily post count reset")
 
 def can_post_today() -> bool:
-    """Check if we can post more today"""
     from datetime import datetime
     
     today = datetime.now().strftime('%Y-%m-%d')
     state = worker.find_one({'_id': 1})
     
-    # Reset if new day
     if not state or state.get('last_reset_date') != today:
         reset_daily_post_count()
         return True
@@ -165,9 +160,7 @@ def can_post_today() -> bool:
         LOG.info(f"⏸️ Daily limit reached: {posts_today}/{max_posts}")
     return can_post
 
-# Queue management functions
 def add_to_queue(item: Dict[str, Any]) -> bool:
-    """Add item to pending queue"""
     from datetime import datetime
     
     title = item.get('title', 'Unknown')
@@ -177,7 +170,6 @@ def add_to_queue(item: Dict[str, Any]) -> bool:
         LOG.warning(f"Cannot add to queue - no hash: {title}")
         return False
     
-    # Check if already in queue
     existing = pending_queue.find_one({'hash': item_hash})
     if existing:
         LOG.debug(f"Item already in queue: {title[:40]}")
@@ -195,7 +187,6 @@ def add_to_queue(item: Dict[str, Any]) -> bool:
     return True
 
 def get_next_queue_item() -> Optional[Dict[str, Any]]:
-    """Get next item from queue (oldest first)"""
     queue_item = pending_queue.find_one(
         {'status': 'pending'},
         sort=[('added_at', 1)]
@@ -207,7 +198,6 @@ def get_next_queue_item() -> Optional[Dict[str, Any]]:
     return None
 
 def mark_queue_item_processed(item_hash: str):
-    """Mark queue item as processed"""
     from datetime import datetime
     
     pending_queue.update_one(
@@ -217,11 +207,9 @@ def mark_queue_item_processed(item_hash: str):
     LOG.debug(f"✅ Marked queue item as processed: {item_hash}")
 
 def get_queue_size() -> int:
-    """Get number of pending items in queue"""
     return pending_queue.count_documents({'status': 'pending'})
 
 def get_queue_stats() -> Dict[str, Any]:
-    """Get queue statistics"""
     pending = pending_queue.count_documents({'status': 'pending'})
     processed = pending_queue.count_documents({'status': 'processed'})
     
