@@ -41,12 +41,12 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
         return None
 
     base_filename = os.path.basename(abs_path)
-    formatted_filename = f">**{base_filename}**"
+    display_caption = base_filename
     
     if title:
-        doc_caption = f">**{base_filename}**"
+        doc_caption = display_caption
     else:
-        doc_caption = f">**{base_filename}**"
+        doc_caption = display_caption
 
     thumb_path = SETTINGS.thumbnail_path if os.path.exists(SETTINGS.thumbnail_path) else None
     if thumb_path:
@@ -87,11 +87,11 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
                         except Exception:
                             LOG.debug("Could not fetch client identity before upload")
                         LOG.debug(f"Using client object {client_to_use} to send to chat {target_chat}")
-                        LOG.info(f"Uploading as document: {formatted_filename}")
+                        LOG.info(f"Uploading as document: {base_filename}")
                         msg = await client_to_use.send_document(
                             chat_id=target_chat,
                             document=fh,
-                            file_name=formatted_filename,
+                            file_name=base_filename,
                             caption=doc_caption,
                             force_document=True,
                             thumb=thumb_path,

@@ -13,6 +13,12 @@ from ..services.downloader import download_torrent
 from ..services.uploader import upload_file, add_download_button, prepare_caption_content
 from ..api.ai_caption import format_for_post, create_enhanced_caption
 from ..utils import generate_hash
+from ..utils.progress_file import (
+    format_download_progress,
+    format_encoding_progress,
+    format_stage_status,
+    should_emit_progress,
+)
 from ..utils.telegraph import create_telegraph_preview_async
 from ..db import add_file_record
 
@@ -69,27 +75,46 @@ async def process_video_download(
     loop = asyncio.get_event_loop()
     last_edit_ts = 0.0
     last_progress_pct = 0.0
+    last_stage = ""
 
     def _progress_cb(stats: Dict[str, float]):
-        nonlocal last_edit_ts, last_progress_pct
+        nonlocal last_edit_ts, last_progress_pct, last_stage
         try:
             now = time.time()
-            stage = stats.get("stage", "downloading")
-            pct = stats.get("progress_pct", 0.0)
-            
-            time_diff = now - last_edit_ts
-            progress_diff = abs(pct - last_progress_pct)
-            
-            if stage != "completed" and time_diff < 10 and progress_diff < 5.0:
+            stage = str(stats.get("stage", "downloading") or "downloading").lower()
+
+            raw_percent = stats.get("progress_pct", 0.0)
+            percent = float(raw_percent)
+
+            down_rate = float(stats.get("down_rate_kbs", 0.0))
+            peers_value = int(stats.get("peers", 0.0))
+            elapsed_value = int(stats.get("elapsed", 0.0))
+
+            force_update = stage != last_stage
+            if not should_emit_progress(
+                now,
+                last_edit_ts,
+                last_progress_pct,
+                percent,
+                min_interval=5.0,
+                min_progress=5.0,
+                force=force_update,
+            ):
                 return
-                
+
             last_edit_ts = now
-            last_progress_pct = pct
-            
-            down = stats.get("down_rate_kbs", 0.0)
-            peers = int(stats.get("peers", 0.0))
-            elapsed = int(stats.get("elapsed", 0.0))
-            text = f"📥 Downloading: {title}\nStage: {stage} | {pct:.1f}%\nSpeed: {down:.1f} kB/s | Peers: {peers} | Elapsed: {elapsed}s"
+            if percent is not None:
+                last_progress_pct = percent
+            last_stage = stage
+
+            text = format_download_progress(
+                title,
+                percent=percent,
+                stage=stage,
+                speed=down_rate,
+                peers=peers_value,
+                elapsed=elapsed_value,
+            )
             try:
                 asyncio.run_coroutine_threadsafe(safe_edit(text), loop)
             except Exception:
@@ -110,7 +135,14 @@ async def process_video_download(
     if info and info.get('file') and os.path.exists(info['file']):
         LOG.info(f"✅ Download successful, starting post-processing for: {info['file']}")
         try:
-            await safe_edit(f"✅ Download complete: {title}\nStarting upload...")
+            await safe_edit(
+                format_stage_status(
+                    "download",
+                    title,
+                    "Download complete. Preparing upload…",
+                    percent=100.0,
+                )
+            )
         except Exception:
             pass
 
@@ -119,7 +151,14 @@ async def process_video_download(
             
             if SETTINGS.enable_encoding:
                 try:
-                    await safe_edit(f"🔄 Encoding to 720p: {os.path.basename(upload_path)}\n⏳ Starting encoding...")
+                    await safe_edit(
+                        format_stage_status(
+                            "encode",
+                            title,
+                            f"Starting encoding to 720p ({os.path.basename(upload_path)})",
+                            show_bar=False,
+                        )
+                    )
                     LOG.info(f"Starting FFEncoder encoding for: {upload_path}")
                     
                     from ..services.encode import FFEncoder
@@ -129,32 +168,35 @@ async def process_video_download(
                     output_name = f"[TW] {sanitized_title} @The_Wyverns.mp4"
                     
                     last_update_time = 0.0
-                    
+                    last_encoding_percent = 0.0
+
                     async def encoding_progress_callback(percent: float, current_sec: float, total_sec: float):
-                        nonlocal last_update_time
-                        import time
+                        nonlocal last_update_time, last_encoding_percent
                         current_time = time.time()
-                        
-                        if current_time - last_update_time >= 5.0 or percent >= 99.9:
-                            last_update_time = current_time
-                            
-                            bar_length = 20
-                            filled = int(bar_length * percent / 100)
-                            bar = "█" * filled + "░" * (bar_length - filled)
-                            
-                            mins_current = int(current_sec // 60)
-                            secs_current = int(current_sec % 60)
-                            mins_total = int(total_sec // 60)
-                            secs_total = int(total_sec % 60)
-                            
-                            status_text = (
-                                f"🔄 Encoding to 720p: {os.path.basename(upload_path)}\n\n"
-                                f"Progress: {percent:.1f}%\n"
-                                f"[{bar}]\n"
-                                f"Time: {mins_current:02d}:{secs_current:02d} / {mins_total:02d}:{secs_total:02d}"
-                            )
-                            
-                            await safe_edit(status_text)
+
+                        if not should_emit_progress(
+                            current_time,
+                            last_update_time,
+                            last_encoding_percent,
+                            percent,
+                            min_interval=5.0,
+                            min_progress=2.0,
+                            force=percent >= 99.9,
+                        ):
+                            return
+
+                        last_update_time = current_time
+                        last_encoding_percent = percent
+
+                        status_text = format_encoding_progress(
+                            title,
+                            percent=percent,
+                            current_sec=current_sec,
+                            total_sec=total_sec,
+                            status=f"Encoding to 720p ({os.path.basename(upload_path)})",
+                        )
+
+                        await safe_edit(status_text)
                     
                     encoder = FFEncoder(upload_path, output_name, progress_callback=encoding_progress_callback)
                     
@@ -177,17 +219,48 @@ async def process_video_download(
                             LOG.warning(f"Failed to cleanup original file: {e}")
                         
                         upload_path = encoded_path
-                        await safe_edit(f"✅ Encoded to 720p: {os.path.basename(upload_path)}\nSize reduced by {abs(reduction):.1f}%")
+                        await safe_edit(
+                            format_stage_status(
+                                "encode",
+                                title,
+                                status=(
+                                    f"Encoding complete → {os.path.basename(upload_path)}"
+                                    f" (Δ {abs(reduction):.1f}%)"
+                                ),
+                                show_bar=False,
+                            )
+                        )
                     else:
                         LOG.warning("FFEncoder encoding failed, using original file")
-                        await safe_edit("⚠️ Encoding failed, using original file")
+                        await safe_edit(
+                            format_stage_status(
+                                "encode",
+                                title,
+                                "Encoding failed, using original file",
+                                show_bar=False,
+                            )
+                        )
                 except Exception as e:
                     LOG.error(f"FFEncoder encoding error: {e}", exc_info=True)
-                    await safe_edit("⚠️ Encoding failed, using original file")
+                    await safe_edit(
+                        format_stage_status(
+                            "encode",
+                            title,
+                            "Encoding failed, using original file",
+                            show_bar=False,
+                        )
+                    )
             else:
                 LOG.info("Encoding disabled; proceeding with original file")
                 try:
-                    await safe_edit("ℹ️ Encoding skipped: proceeding with original file")
+                    await safe_edit(
+                        format_stage_status(
+                            "encode",
+                            title,
+                            "Encoding skipped; using original file",
+                            show_bar=False,
+                        )
+                    )
                 except Exception:
                     pass
 
@@ -210,12 +283,30 @@ async def process_video_download(
             
             if file_size_bytes > TWO_GB:
                 LOG.info("File >2GB, will split into parts")
-                await safe_edit(f"🔀 File >2GiB detected; splitting into 2 parts for upload")
+                await safe_edit(
+                    format_stage_status(
+                        "split",
+                        title,
+                        "File >2 GiB detected; splitting into two parts",
+                        show_bar=False,
+                    )
+                )
                 uploaded, part_hashes = await upload_large_file(
                     bot_client, file_client, upload_path, title, item, file_size_bytes, safe_edit
                 )
             else:
                 LOG.info("File <=2GB, uploading as single file")
+                try:
+                    await safe_edit(
+                        format_stage_status(
+                            "upload",
+                            title,
+                            "Uploading to Telegram…",
+                            show_bar=False,
+                        )
+                    )
+                except Exception:
+                    pass
                 uploaded, file_hash = await upload_single_file(
                     bot_client, file_client, upload_path, title, item, caption
                 )
@@ -224,6 +315,17 @@ async def process_video_download(
             
             if uploaded:
                 LOG.info("Starting post to main channel...")
+                try:
+                    await safe_edit(
+                        format_stage_status(
+                            "completed",
+                            title,
+                            "Upload complete. Posting to main channel…",
+                            show_bar=False,
+                        )
+                    )
+                except Exception:
+                    pass
                 await post_to_main_channel(bot_client, file_client, item, caption, file_hash, part_hashes, upload_path)
                 LOG.info(f"✅ Successfully uploaded and posted: {title}")
                 
@@ -232,6 +334,17 @@ async def process_video_download(
                 await cleanup_directories()
             else:
                 LOG.error(f"❌ Upload failed for: {title}")
+                try:
+                    await safe_edit(
+                        format_stage_status(
+                            "upload",
+                            title,
+                            "Upload failed. Cleaning up…",
+                            show_bar=False,
+                        )
+                    )
+                except Exception:
+                    pass
                 await cleanup_files(info['file'], upload_path)
             
         except Exception as upload_error:
@@ -264,7 +377,14 @@ async def remux_if_needed(file_path: str, safe_edit, title: str) -> str:
         return file_path
     
     try:
-        await safe_edit(f"🔁 Remuxing .ts → .mp4 for: {title}")
+        await safe_edit(
+            format_stage_status(
+                "remux",
+                title,
+                "Remuxing .ts → .mp4",
+                show_bar=False,
+            )
+        )
     except Exception:
         pass
     
@@ -296,12 +416,26 @@ async def remux_if_needed(file_path: str, safe_edit, title: str) -> str:
     
     if new_path != file_path:
         try:
-            await safe_edit(f"✅ Remux complete: {os.path.basename(new_path)}")
+            await safe_edit(
+                format_stage_status(
+                    "remux",
+                    title,
+                    f"Remux complete → {os.path.basename(new_path)}",
+                    show_bar=False,
+                )
+            )
         except Exception:
             pass
     else:
         try:
-            await safe_edit("ℹ️ Remux skipped or failed, will use original file")
+            await safe_edit(
+                format_stage_status(
+                    "remux",
+                    title,
+                    "Remux skipped or failed; using original file",
+                    show_bar=False,
+                )
+            )
         except Exception:
             pass
     
