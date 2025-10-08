@@ -6,7 +6,6 @@ from ..db import add_user
 img = "AAB/utils/thumb.jpeg"
 
 async def start_cmd(client: Client, message: Message):
-    
     try:
         user = message.from_user
         if user:
@@ -15,7 +14,7 @@ async def start_cmd(client: Client, message: Message):
             if user.last_name:
                 name += f" {user.last_name}"
             username = user.username
-            
+
             is_new = add_user(user_id, name, username)
             if is_new:
                 print(f"✅ New user started bot: {name} (@{username or 'no_username'})")
@@ -41,9 +40,10 @@ async def start_cmd(client: Client, message: Message):
     kb = InlineKeyboardMarkup([welcome_row, action_row, backup_row])
 
     text = (
-        f">👋 hey, {user.mention()}\n\n"
-        "I'm File Provider Bot..\n"
-        "Use the buttons below to stay connected with our community!"
+        f">**Welcome, {user.mention()}**\n\n"
+        "__This bot provides fast and reliable access to files and updates.__\n"
+        "__Stay connected with our main channel and support group using the buttons below.__\n\n"
+        "__**Need help or facing an issue? Reach out anytime through the support section.**__"
     )
 
-    await message.reply_photo(photo=img,caption=text, reply_markup=kb)
+    await message.reply_photo(photo=img, caption=text, reply_markup=kb)
