@@ -41,7 +41,7 @@ async def start_cmd(client: Client, message: Message):
     kb = InlineKeyboardMarkup([welcome_row, action_row, backup_row])
 
     text = (
-        f">👋 hey, {user.mention()}🎉\n\n"
+        f">👋 hey, {user.mention()}\n\n"
         "I'm File Provider Bot..\n"
         "Use the buttons below to stay connected with our community!"
     )
