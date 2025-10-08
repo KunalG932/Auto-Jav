@@ -42,13 +42,13 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
 
     # Format filename with [TW] prefix
     base_filename = os.path.basename(abs_path)
-    formatted_filename = f"{base_filename}"
+    formatted_filename = f">**{base_filename}**"
     
     # Create caption with filename in blockquote and bold
     if title:
-        doc_caption = f"**{base_filename}**"
+        doc_caption = f">**{base_filename}**"
     else:
-        doc_caption = f"> **{base_filename}**"
+        doc_caption = f">**{base_filename}**"
 
     from ..utils import download_thumbnail_with_fallback
     
