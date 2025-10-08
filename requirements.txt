@@ -6,3 +6,4 @@ deep-translator
 git+https://github.com/kaif-00z/html-telegraph-poster
 lxml_html_clean
 python-libtorrent
+psutil

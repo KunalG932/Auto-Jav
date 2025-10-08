@@ -16,11 +16,20 @@ LOG = logging.getLogger("Jav")
 DOWNLOAD_LOCK = asyncio.Semaphore(1)
 
 async def process_item(bot_client: Optional[Client], file_client: Optional[Client], item: Dict[str, Any]) -> None:
+    from ..db import can_post_today, add_to_queue, get_posts_today
+    
     if bot_client is None:
         LOG.error("process_item called without a running bot client; skipping")
         return
 
     title = get_title(item) or 'Unknown Title'
+    
+    # Check daily limit first
+    if not can_post_today():
+        posts_today = get_posts_today()
+        LOG.info(f"⏸️ Daily limit reached ({posts_today}/{SETTINGS.max_posts_per_day}). Adding to queue: {title[:50]}")
+        add_to_queue(item)
+        return
     
     if is_failed_download(title):
         LOG.info(f"⏭️ Skipping previously failed download: {title}")

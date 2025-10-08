@@ -306,3 +306,133 @@ async def failed_command(client: Client, message: Message):
     except Exception as e:
         LOG.error(f"Error in failed command: {e}")
         await message.reply_text(f"❌ Error: {str(e)}")
+
+async def queue_command(client: Client, message: Message):
+    """Show queue status and daily post limits"""
+    try:
+        from ..db import get_queue_size, get_posts_today, pending_queue, get_queue_stats
+        from ..config import SETTINGS
+        
+        queue_size = get_queue_size()
+        posts_today = get_posts_today()
+        max_posts = SETTINGS.max_posts_per_day
+        remaining = max(0, max_posts - posts_today)
+        queue_stats = get_queue_stats()
+        
+        # Get next few items in queue
+        next_items = list(pending_queue.find(
+            {'status': 'pending'},
+            sort=[('added_at', 1)]
+        ).limit(5))
+        
+        queue_text = (
+            f"📊 **Queue & Daily Limit Status**\n\n"
+            f"📅 **Today's Posts:** {posts_today}/{max_posts}\n"
+            f"⏳ **Remaining Today:** {remaining}\n"
+            f"📦 **Queue Size:** {queue_size} pending\n"
+            f"✅ **Processed Total:** {queue_stats['processed']}\n\n"
+        )
+        
+        if next_items:
+            queue_text += "**📋 Next in Queue:**\n"
+            for idx, item in enumerate(next_items, 1):
+                item_data = item.get('item_data', {})
+                title = item_data.get('title', 'Unknown')[:35]
+                queue_text += f"{idx}. {title}...\n"
+            
+            if queue_size > 5:
+                queue_text += f"\n...and {queue_size - 5} more items\n"
+        else:
+            queue_text += "✅ **Queue is empty**\n"
+        
+        queue_text += f"\n🔄 Check Interval: Every {SETTINGS.check_interval_sec}s"
+        
+        await message.reply_text(queue_text)
+        LOG.info(f"Queue command executed by user {getattr(message.from_user, 'id', 'unknown')}")
+        
+    except Exception as e:
+        LOG.error(f"Error in queue command: {e}")
+        await message.reply_text(f"❌ Error fetching queue status: {str(e)}")
+
+async def resources_command(client: Client, message: Message):
+    """Show system resource usage"""
+    try:
+        import psutil
+        import shutil
+        from datetime import datetime
+        
+        # CPU and Memory
+        cpu_percent = psutil.cpu_percent(interval=1)
+        memory = psutil.virtual_memory()
+        memory_used_gb = memory.used / (1024**3)
+        memory_total_gb = memory.total / (1024**3)
+        memory_percent = memory.percent
+        
+        # Disk usage
+        disk = shutil.disk_usage('.')
+        disk_used_gb = disk.used / (1024**3)
+        disk_total_gb = disk.total / (1024**3)
+        disk_percent = (disk.used / disk.total) * 100
+        disk_free_gb = disk.free / (1024**3)
+        
+        # Downloads folder size
+        downloads_size = 0
+        downloads_path = './downloads'
+        if os.path.exists(downloads_path):
+            for dirpath, dirnames, filenames in os.walk(downloads_path):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    try:
+                        downloads_size += os.path.getsize(filepath)
+                    except:
+                        pass
+        downloads_size_gb = downloads_size / (1024**3)
+        
+        # Encode folder size
+        encode_size = 0
+        encode_path = './encode'
+        if os.path.exists(encode_path):
+            for dirpath, dirnames, filenames in os.walk(encode_path):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    try:
+                        encode_size += os.path.getsize(filepath)
+                    except:
+                        pass
+        encode_size_gb = encode_size / (1024**3)
+        
+        # Database stats
+        from ..db import files, users, pending_queue, failed_downloads
+        total_files = files.count_documents({})
+        total_users = users.count_documents({})
+        queue_size = pending_queue.count_documents({'status': 'pending'})
+        failed_count = failed_downloads.count_documents({})
+        
+        resource_text = (
+            f"💻 **System Resources**\n\n"
+            f"**🖥️ CPU Usage:** {cpu_percent}%\n"
+            f"**🧠 RAM:** {memory_used_gb:.2f}GB / {memory_total_gb:.2f}GB ({memory_percent}%)\n"
+            f"**💾 Disk:** {disk_used_gb:.1f}GB / {disk_total_gb:.1f}GB ({disk_percent:.1f}%)\n"
+            f"**📁 Free Space:** {disk_free_gb:.1f}GB\n\n"
+            f"**📂 Storage Breakdown:**\n"
+            f"├ Downloads: {downloads_size_gb:.2f}GB\n"
+            f"└ Encode: {encode_size_gb:.2f}GB\n\n"
+            f"**📊 Database Stats:**\n"
+            f"├ Total Files: {total_files}\n"
+            f"├ Total Users: {total_users}\n"
+            f"├ Queue Items: {queue_size}\n"
+            f"└ Failed Downloads: {failed_count}\n\n"
+            f"⏰ Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        await message.reply_text(resource_text)
+        LOG.info(f"Resources command executed by user {getattr(message.from_user, 'id', 'unknown')}")
+        
+    except ImportError:
+        await message.reply_text(
+            "❌ psutil module not installed.\n\n"
+            "Install it with: `pip install psutil`"
+        )
+    except Exception as e:
+        LOG.error(f"Error in resources command: {e}")
+        await message.reply_text(f"❌ Error fetching resources: {str(e)}")

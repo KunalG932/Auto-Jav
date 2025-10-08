@@ -9,7 +9,7 @@ from .clients import create_clients
 from .db import client as mongo_client, is_working, set_working
 from .handlers import (
     alive_command, logs_command, status_command, start_command,
-    stats_command, broadcast_command, failed_command
+    stats_command, broadcast_command, failed_command, queue_command, resources_command
 )
 from .handlers.commands import set_clients
 from .processors import process_item, check_for_new_items
@@ -27,19 +27,46 @@ file_client: Optional[Client] = None
 
 async def worker_loop():
     global bot, file_client
+    from .db import can_post_today, get_next_queue_item, mark_queue_item_processed, get_queue_size, get_posts_today
 
     while True:
         try:
             if not is_working():
                 set_working(True)
                 try:
-                    new_items = check_for_new_items()
-                    if new_items:
-                        LOG.info(f"Processing {len(new_items)} new items")
-                        for item in new_items:
-                            await process_item(bot, file_client, item)
+                    # Check if we can post today
+                    if not can_post_today():
+                        queue_size = get_queue_size()
+                        posts_today = get_posts_today()
+                        LOG.info(f"⏸️ Daily limit reached ({posts_today}/{SETTINGS.max_posts_per_day}). Queue: {queue_size} items. Waiting...")
                     else:
-                        LOG.debug("No new items found")
+                        # First, check for new items from API
+                        new_items = check_for_new_items()
+                        if new_items:
+                            LOG.info(f"📥 Processing {len(new_items)} new items from API")
+                            for item in new_items:
+                                if not can_post_today():
+                                    LOG.info("⏸️ Daily limit reached during processing. Remaining items will be queued.")
+                                    break
+                                await process_item(bot, file_client, item)
+                        else:
+                            LOG.debug("No new items from API")
+                        
+                        # Then, process queue if we still have capacity
+                        while can_post_today():
+                            queue_item = get_next_queue_item()
+                            if not queue_item:
+                                LOG.debug("📭 Queue is empty")
+                                break
+                            
+                            from ..api.feed import get_title
+                            LOG.info(f"📦 Processing queued item: {get_title(queue_item)[:50]}")
+                            await process_item(bot, file_client, queue_item)
+                            
+                            item_hash = queue_item.get('hash')
+                            if item_hash:
+                                mark_queue_item_processed(item_hash)
+                
                 except Exception as process_error:
                     LOG.exception(f"Error processing items: {process_error}")
                 finally:
@@ -80,6 +107,8 @@ def register_handlers(bot: Client, file_client: Client):
         (stats_command, "stats"),
         (broadcast_command, "broadcast"),
         (failed_command, "failed"),
+        (queue_command, "queue"),
+        (resources_command, "resources"),
         (start_command, "start", filters.private),
     ]
 

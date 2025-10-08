@@ -36,6 +36,8 @@ class Settings:
     client_bot_token: str = os.getenv("CLIENT_BOT_TOKEN", "")
 
     check_interval_sec: int = int(os.getenv("CHECK_INTERVAL_SEC", "600"))
+    max_posts_per_day: int = int(os.getenv("MAX_POSTS_PER_DAY", "3"))
+    
     api_endpoint: str = os.getenv("JAV_API_URL", "https://jav-api-w4od.onrender.com/api/latest?limit=10&random_pages=true&translate=true")
     api_timeout_sec: int = int(os.getenv("JAV_API_TIMEOUT_SEC", "300"))
     api_retries: int = int(os.getenv("JAV_API_RETRIES", "5"))
