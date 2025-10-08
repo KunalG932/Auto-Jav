@@ -73,7 +73,11 @@ def call_ai_api(prompt: str, mode: str = "caption", timeout: int = 10, max_retri
     
     sanitized_prompt = sanitize_input(prompt)
     url = "https://lexica.qewertyy.dev/models"
-    system_role = "You are a seductive and witty caption creator💋." if mode == "caption" else "You are a creative adult film title generator🎬."
+    system_role = (
+        "You are a creative and engaging caption creator. Write fun, playful, and attractive captions suitable for a wide audience."
+        if mode == "caption"
+        else "You are a creative video title generator. Suggest catchy, appealing, and intriguing titles that spark curiosity."
+    )
     instructions = (
         "Write one flirty, daring, playful caption. Use emojis like 😈🍑🍆💦🔥 naturally. "
         "Avoid raw words; use euphemisms. Output only text."
