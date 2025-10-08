@@ -50,15 +50,12 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
     else:
         doc_caption = f">**{base_filename}**"
 
-    from ..utils import download_thumbnail_with_fallback
-    
-    thumbnail_url = item.get('thumbnail') if item else None
-    filename_prefix = f"{item.get('code', 'thumb')}_upload" if item and item.get('code') else 'thumb_upload'
-    thumb_path = download_thumbnail_with_fallback(
-        thumbnail_url,
-        SETTINGS,
-        filename_prefix=filename_prefix
-    )
+    # Use default thumbnail only (not from API)
+    thumb_path = SETTINGS.thumbnail_path if os.path.exists(SETTINGS.thumbnail_path) else None
+    if thumb_path:
+        LOG.info(f"Using default thumbnail: {thumb_path}")
+    else:
+        LOG.warning("Default thumbnail not found")
 
     upload_path = abs_path
     LOG.info("Encoding/size-reduction disabled; proceeding to upload original file")

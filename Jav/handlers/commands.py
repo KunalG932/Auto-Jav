@@ -78,13 +78,62 @@ async def start_command(client: Client, message: Message):
                 await message.reply_text("❌ Could not determine destination chat id")
                 return
 
-            await forwarder.forward_messages(
+            # Use copy_message instead of forward_messages so the forwarded tag is not shown
+            copied_msg = await forwarder.copy_message(
                 chat_id=chat_id,
                 from_chat_id=SETTINGS.files_channel,
-                message_ids=message_id,
-                protect_content=True,
+                message_id=message_id,
+                #protect_content=True,
             )
-            LOG.info(f"File forwarded to user {getattr(message.from_user, 'id', 'unknown')} for hash {file_hash}")
+            LOG.info(f"File copied to user {getattr(message.from_user, 'id', 'unknown')} for hash {file_hash} (no forwarded tag)")
+            
+            # Send warning message about deletion
+            warning_text = (
+                ">⚠️ **IMPORTANT WARNING** ⚠️\n\n"
+                "🗑️ This file will be **DELETED in 3 MINUTES**!\n\n"
+                "📤 **Please FORWARD this file to your Saved Messages NOW**\n\n"
+                "⏰ Don't wait - save it immediately!"
+            )
+            warning_msg = await message.reply_text(warning_text)
+            
+            # Schedule file and warning deletion after 3 minutes
+            async def delete_after_delay():
+                await asyncio.sleep(180)  # 3 minutes = 180 seconds
+                try:
+                    # Delete the copied file message
+                    await forwarder.delete_messages(chat_id=chat_id, message_ids=copied_msg.id)
+                    LOG.info(f"Deleted file message {copied_msg.id} for user {chat_id}")
+                except Exception as del_e:
+                    LOG.warning(f"Failed to delete file message: {del_e}")
+                
+                try:
+                    # Delete the warning message
+                    await warning_msg.delete()
+                    LOG.info(f"Deleted warning message for user {chat_id}")
+                except Exception as warn_del_e:
+                    LOG.warning(f"Failed to delete warning message: {warn_del_e}")
+                
+                # Send deletion confirmation with restart button
+                from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                
+                restart_button = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Get File Again", url=f"https://t.me/{getattr(await forwarder.get_me(), 'username', 'bot')}?start={file_hash}")]
+                ])
+                
+                deletion_text = (
+                    ">🗑️ **File Deleted**\n\n"
+                    "The file has been removed after 3 minutes.\n\n"
+                    "__If you need it again, click the button below:__"
+                )
+                
+                try:
+                    await client.send_message(chat_id=chat_id, text=deletion_text, reply_markup=restart_button)
+                    LOG.info(f"Sent deletion notification to user {chat_id}")
+                except Exception as notif_e:
+                    LOG.warning(f"Failed to send deletion notification: {notif_e}")
+            
+            # Run deletion task in background
+            asyncio.create_task(delete_after_delay())
         except Exception as e:
             LOG.exception(f"Failed to forward message {message_id}: {e}")
             await message.reply_text("❌ Failed to send file. Contact admin.")
