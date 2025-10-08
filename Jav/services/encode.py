@@ -3,6 +3,12 @@ from aiofiles.os import rename as aiorename
 from asyncio import create_subprocess_shell
 from asyncio.subprocess import PIPE
 import glob
+import re
+import logging
+from typing import Optional, Callable
+import asyncio
+
+LOG = logging.getLogger("Jav")
 
 FFARGS_720P = (
     "-c:v libx264 -preset veryfast -crf 28 "
@@ -16,12 +22,13 @@ if not ospath.exists("encode"):
     makedirs("encode", exist_ok=True)
 
 class FFEncoder:
-    def __init__(self, path, name):
+    def __init__(self, path, name, progress_callback: Optional[Callable] = None):
         self.__proc = None
         self.is_cancelled = False
         self.__name = name
         self.dl_path = path
         self.out_path = ospath.join("encode", name)
+        self.progress_callback = progress_callback
 
     async def start_encode(self):
         dl_npath = ospath.join("encode", "ffanimeadvin.mkv")
@@ -36,9 +43,13 @@ class FFEncoder:
             video_file = self.dl_path
 
         await aiorename(video_file, dl_npath)
+        
+        # Get video duration first for progress calculation
+        duration_seconds = await self._get_video_duration(dl_npath)
+        LOG.info(f"Video duration: {duration_seconds}s")
 
         ffcode = (
-            f"ffmpeg -hide_banner -loglevel error -i '{dl_npath}' "
+            f"ffmpeg -hide_banner -progress pipe:1 -i '{dl_npath}' "
             f"-vf '{SCALE_720P}:flags=fast_bilinear' "
             f"-map 0:v -map 0:a -map 0:s? "
             f"{FFARGS_720P} "
@@ -55,6 +66,11 @@ class FFEncoder:
         )
 
         self.__proc = await create_subprocess_shell(ffcode, stdout=PIPE, stderr=PIPE)
+        
+        # Monitor encoding progress
+        if self.progress_callback and duration_seconds:
+            asyncio.create_task(self._monitor_progress(self.__proc.stdout, duration_seconds))
+        
         await self.__proc.wait()
 
         await aiorename(dl_npath, self.dl_path)
@@ -67,6 +83,46 @@ class FFEncoder:
             return self.out_path
         else:
             return None
+    
+    async def _get_video_duration(self, video_path: str) -> Optional[float]:
+        """Get video duration in seconds using ffprobe"""
+        try:
+            cmd = f"ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 '{video_path}'"
+            proc = await create_subprocess_shell(cmd, stdout=PIPE, stderr=PIPE)
+            stdout, _ = await proc.communicate()
+            duration = float(stdout.decode().strip())
+            return duration
+        except Exception as e:
+            LOG.warning(f"Failed to get video duration: {e}")
+            return None
+    
+    async def _monitor_progress(self, stdout, total_duration: float):
+        """Monitor FFmpeg progress and call callback with percentage"""
+        try:
+            buffer = ""
+            while True:
+                chunk = await stdout.read(1024)
+                if not chunk:
+                    break
+                
+                buffer += chunk.decode('utf-8', errors='ignore')
+                lines = buffer.split('\n')
+                buffer = lines[-1]
+                
+                for line in lines[:-1]:
+                    if line.startswith('out_time_ms='):
+                        try:
+                            time_ms = int(line.split('=')[1])
+                            current_seconds = time_ms / 1000000.0
+                            progress_pct = min((current_seconds / total_duration) * 100, 100.0)
+                            
+                            if self.progress_callback:
+                                await self.progress_callback(progress_pct, current_seconds, total_duration)
+                        except Exception as e:
+                            LOG.debug(f"Progress parse error: {e}")
+                            
+        except Exception as e:
+            LOG.warning(f"Progress monitoring error: {e}")
 
     async def cancel_encode(self):
         self.is_cancelled = True

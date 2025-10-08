@@ -119,15 +119,47 @@ async def process_video_download(
             
             if SETTINGS.enable_encoding:
                 try:
-                    await safe_edit(f"🔄 Encoding to 720p: {os.path.basename(upload_path)}")
+                    await safe_edit(f"🔄 Encoding to 720p: {os.path.basename(upload_path)}\n⏳ Starting encoding...")
                     LOG.info(f"Starting FFEncoder encoding for: {upload_path}")
                     
                     from ..services.encode import FFEncoder
                     from ..services.downloader import sanitize_filename
                     
-                    output_name = f"{sanitize_filename(title)}_encoded.mkv"
+                    # Format with [TW] prefix and @The_Wyverns suffix
+                    sanitized_title = sanitize_filename(title)
+                    output_name = f"[TW] {sanitized_title} @The_Wyverns.mp4"
                     
-                    encoder = FFEncoder(upload_path, output_name)
+                    last_update_time = 0.0
+                    
+                    async def encoding_progress_callback(percent: float, current_sec: float, total_sec: float):
+                        nonlocal last_update_time
+                        import time
+                        current_time = time.time()
+                        
+                        # Update every 5 seconds or at 100%
+                        if current_time - last_update_time >= 5.0 or percent >= 99.9:
+                            last_update_time = current_time
+                            
+                            # Create progress bar
+                            bar_length = 20
+                            filled = int(bar_length * percent / 100)
+                            bar = "█" * filled + "░" * (bar_length - filled)
+                            
+                            mins_current = int(current_sec // 60)
+                            secs_current = int(current_sec % 60)
+                            mins_total = int(total_sec // 60)
+                            secs_total = int(total_sec % 60)
+                            
+                            status_text = (
+                                f"🔄 Encoding to 720p: {os.path.basename(upload_path)}\n\n"
+                                f"Progress: {percent:.1f}%\n"
+                                f"[{bar}]\n"
+                                f"Time: {mins_current:02d}:{secs_current:02d} / {mins_total:02d}:{secs_total:02d}"
+                            )
+                            
+                            await safe_edit(status_text)
+                    
+                    encoder = FFEncoder(upload_path, output_name, progress_callback=encoding_progress_callback)
                     
                     encoded_path = await encoder.start_encode()
                     
