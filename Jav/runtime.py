@@ -110,9 +110,25 @@ async def main():
     LOG.info("✅ Downloads directory ready")
 
     LOG.info("🔥 Warming up API...")
-    warm_up_api(max_attempts=2)
+    warm_up_api(max_attempts=3)
 
     LOG.info(f"🚀 Jav bot started! Check interval: {SETTINGS.check_interval_sec}s")
+    
+    # Perform an immediate check on startup
+    LOG.info("🔍 Performing initial content check...")
+    try:
+        set_working(True)
+        new_items = check_for_new_items()
+        if new_items:
+            LOG.info(f"✅ Found {len(new_items)} items on startup - processing now...")
+            for item in new_items:
+                await process_item(bot, file_client, item)
+        else:
+            LOG.info("No new items found on startup")
+    except Exception as startup_check_error:
+        LOG.exception(f"Error during startup check: {startup_check_error}")
+    finally:
+        set_working(False)
 
     try:
         await worker_loop()

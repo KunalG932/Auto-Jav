@@ -7,13 +7,16 @@ LOG = logging.getLogger("Jav")
 
 def check_for_new_items() -> Optional[List[Dict[str, Any]]]:
     try:
+        LOG.info("📡 Fetching items from API...")
         results = fetch_jav()
         if not results:
-            LOG.info("No results from feed")
+            LOG.warning("⚠️ No results from feed - API may be unavailable or returned empty response")
             return None
+        
+        LOG.info(f"📦 Received {len(results)} items from API")
 
         last_hash = get_last_hash()
-        LOG.info(f"Current stored last_hash: {last_hash}")
+        LOG.info(f"🔍 Current stored last_hash: {last_hash}")
 
         new_items: List[Dict[str, Any]] = []
         first_hash: Optional[str] = None
@@ -58,11 +61,8 @@ def check_for_new_items() -> Optional[List[Dict[str, Any]]]:
             pass
 
         if first_hash:
-            if last_hash is not None:
-                LOG.info(f"Setting last_hash to newest item: {first_hash}")
-                set_last_hash(first_hash)
-            else:
-                LOG.info(f"Not setting last_hash on first run; newest item would be: {first_hash}")
+            LOG.info(f"Setting last_hash to newest item: {first_hash}")
+            set_last_hash(first_hash)
 
         new_items.reverse()
         LOG.info(f"Found {len(new_items)} new items")
