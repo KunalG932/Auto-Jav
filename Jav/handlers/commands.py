@@ -474,7 +474,6 @@ async def clear_folders_command(client: Client, message: Message):
         # List of folders to clear
         folders = [
             "downloads",
-            "AAB/utils/thumb",
             "encode"
         ]
         for folder in folders:
