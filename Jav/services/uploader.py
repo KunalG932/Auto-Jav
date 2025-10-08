@@ -40,10 +40,15 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
         LOG.error(f"Error while resolving file path: {e}")
         return None
 
+    # Format filename with [TW] prefix
+    base_filename = os.path.basename(abs_path)
+    formatted_filename = f"[TW] {base_filename} @The_Wyverns"
+    
+    # Create caption with filename in blockquote and bold
     if title:
-        doc_caption = title
+        doc_caption = f"{title}\n\n> **[TW] {base_filename} @The_Wyverns**"
     else:
-        doc_caption = os.path.basename(abs_path)
+        doc_caption = f"> **[TW] {base_filename} @The_Wyverns**"
 
     from ..utils import download_thumbnail_with_fallback
     
@@ -91,7 +96,7 @@ async def upload_file(file_client, file_path: str, title: Optional[str] = None,
                         msg = await client_to_use.send_document(
                             chat_id=target_chat,
                             document=fh,
-                            file_name=os.path.basename(upload_path),
+                            file_name=formatted_filename,
                             caption=doc_caption,
                             force_document=True,
                             thumb=thumb_path,

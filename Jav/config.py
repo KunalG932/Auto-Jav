@@ -25,7 +25,7 @@ class Settings:
 
     mongo_uri: str = os.getenv("MONGO_URI", "")
 
-    main_channel: str = os.getenv("MAIN_CHANNEL", "")
+    main_channel: int = int(os.getenv("MAIN_CHANNEL", "0"))
     thumbnail_path: str = os.getenv("THUMBNAIL_PATH", "AAB/utils/thumb.jpeg")
     files_channel: int = int(os.getenv("FILES_CHANNEL", "0"))
     production_chat: int = int(os.getenv("PRODUCTION_CHAT", "0"))
