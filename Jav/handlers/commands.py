@@ -21,6 +21,10 @@ def set_clients(bot, file_client):
     bot_instance = bot
     file_client_instance = file_client
 
+def is_owner(user_id: int) -> bool:
+    """Check if user is an owner"""
+    return user_id in SETTINGS.owner_ids
+
 async def alive_command(client: Client, message: Message):
     await message.reply_text("🤖 Jav is alive and running!")
 
@@ -29,6 +33,12 @@ async def logs_command(client: Client, message: Message):
     if user_id is None:
         await message.reply_text("❌ Could not determine your user id")
         return
+    
+    # Owner-only check
+    if not is_owner(user_id):
+        await message.reply_text("⛔ This command is only available to bot owners.")
+        return
+    
     success = await send_logs_to_user(client, user_id)
     if success:
         await message.reply_text("📄 Logs sent to your PM")
@@ -150,7 +160,7 @@ async def stats_command(client: Client, message: Message):
         )
         
         await message.reply_text(stats_text)
-        LOG.info(f"Stats command executed by user {message.from_user.id}")
+        LOG.info(f"Stats command executed by user {getattr(message.from_user, 'id', 'unknown')}")
         
     except Exception as e:
         LOG.error(f"Error in stats command: {e}")
@@ -158,6 +168,13 @@ async def stats_command(client: Client, message: Message):
 
 async def broadcast_command(client: Client, message: Message):
     try:
+        user_id = getattr(message.from_user, 'id', None)
+        
+        # Owner-only check
+        if user_id is None or not is_owner(user_id):
+            await message.reply_text("⛔ This command is only available to bot owners.")
+            return
+        
         if not message.reply_to_message:
             await message.reply_text(
                 "❌ Please reply to a message with /broadcast to forward it to all users.\n\n"
@@ -224,6 +241,13 @@ async def broadcast_command(client: Client, message: Message):
 
 async def failed_command(client: Client, message: Message):
     try:
+        user_id = getattr(message.from_user, 'id', None)
+        
+        # Owner-only check
+        if user_id is None or not is_owner(user_id):
+            await message.reply_text("⛔ This command is only available to bot owners.")
+            return
+        
         text = (message.text or '').strip().split(maxsplit=2)
         command = text[0] if len(text) > 0 else '/failed'
         action = text[1].lower() if len(text) > 1 else None
@@ -346,45 +370,14 @@ async def queue_command(client: Client, message: Message):
         await message.reply_text(f"❌ Error fetching queue status: {str(e)}")
 
 async def resources_command(client: Client, message: Message):
-@Client.on_message(filters.command(["clearfolders", "cleanfolders", "deletefolders"]))
-async def clear_folders_command(client: Client, message: Message):
-    """
-    Deletes all files inside 'downloads', 'AAB/utils/thumb', and 'encode' folders.
-    Usage: /clearfolders or /cleanfolders or /deletefolders
-    """
     try:
-        import shutil
-        import glob
-        deleted = []
-        errors = []
-        # List of folders to clear
-        folders = [
-            "downloads",
-            "encode"
-        ]
-        for folder in folders:
-            abs_path = os.path.abspath(folder)
-            if os.path.exists(abs_path):
-                # Remove all files and subfolders inside, but not the folder itself
-                for item in os.listdir(abs_path):
-                    item_path = os.path.join(abs_path, item)
-                    try:
-                        if os.path.isfile(item_path) or os.path.islink(item_path):
-                            os.remove(item_path)
-                        elif os.path.isdir(item_path):
-                            shutil.rmtree(item_path)
-                        deleted.append(item_path)
-                    except Exception as e:
-                        errors.append(f"{item_path}: {str(e)}")
-            else:
-                errors.append(f"{abs_path} does not exist.")
-        reply = f"✅ Deleted {len(deleted)} items from folders."
-        if errors:
-            reply += f"\n❌ Errors:\n" + "\n".join(errors)
-        await message.reply_text(reply)
-    except Exception as e:
-        await message.reply_text(f"❌ Error clearing folders: {str(e)}")
-    try:
+        user_id = getattr(message.from_user, 'id', None)
+        
+        # Owner-only check
+        if user_id is None or not is_owner(user_id):
+            await message.reply_text("⛔ This command is only available to bot owners.")
+            return
+        
         import psutil
         import shutil
         from datetime import datetime
@@ -460,6 +453,55 @@ async def clear_folders_command(client: Client, message: Message):
         LOG.error(f"Error in resources command: {e}")
         await message.reply_text(f"❌ Error fetching resources: {str(e)}")
 
+@Client.on_message(filters.command(["clearfolders", "cleanfolders", "deletefolders"]))
+async def clear_folders_command(client: Client, message: Message):
+    """
+    Deletes all files inside 'downloads', 'AAB/utils/thumb', and 'encode' folders.
+    Usage: /clearfolders or /cleanfolders or /deletefolders
+    """
+    try:
+        user_id = getattr(message.from_user, 'id', None)
+        
+        # Owner-only check
+        if user_id is None or not is_owner(user_id):
+            await message.reply_text("⛔ This command is only available to bot owners.")
+            return
+        
+        import shutil
+        import glob
+        deleted = []
+        errors = []
+        # List of folders to clear
+        folders = [
+            "downloads",
+            "AAB/utils/thumb",
+            "encode"
+        ]
+        for folder in folders:
+            abs_path = os.path.abspath(folder)
+            if os.path.exists(abs_path):
+                # Remove all files and subfolders inside, but not the folder itself
+                for item in os.listdir(abs_path):
+                    item_path = os.path.join(abs_path, item)
+                    try:
+                        if os.path.isfile(item_path) or os.path.islink(item_path):
+                            os.remove(item_path)
+                        elif os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        deleted.append(item_path)
+                    except Exception as e:
+                        errors.append(f"{item_path}: {str(e)}")
+            else:
+                errors.append(f"{abs_path} does not exist.")
+        reply = f"✅ Deleted {len(deleted)} items from folders."
+        if errors:
+            reply += f"\n❌ Errors:\n" + "\n".join(errors)
+        await message.reply_text(reply)
+        LOG.info(f"Clear folders command executed by user {user_id}")
+    except Exception as e:
+        LOG.error(f"Error in clear folders command: {e}")
+        await message.reply_text(f"❌ Error clearing folders: {str(e)}")
+
 @Client.on_message(filters.command(["restart", "reboot"]))
 async def restart_command(client: Client, message: Message):
     """
@@ -467,11 +509,18 @@ async def restart_command(client: Client, message: Message):
     Usage: /restart or /reboot
     """
     try:
+        user_id = getattr(message.from_user, 'id', None)
+        
+        # Owner-only check
+        if user_id is None or not is_owner(user_id):
+            await message.reply_text("⛔ This command is only available to bot owners.")
+            return
+        
         import sys
         import subprocess
         
         await message.reply_text("🔄 Restarting bot... Please wait.")
-        LOG.info(f"Restart command executed by user {getattr(message.from_user, 'id', 'unknown')}")
+        LOG.info(f"Restart command executed by user {user_id}")
         
         # Stop the bot gracefully
         await client.stop()
