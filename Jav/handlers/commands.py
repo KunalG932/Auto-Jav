@@ -4,6 +4,7 @@ import logging
 import asyncio
 from pyrogram.client import Client
 from pyrogram.types import Message
+from pyrogram import filters
 from pyrogram import enums
 from .utils import send_logs_to_user
 from ..db import is_working, get_last_hash, get_file_by_hash, get_total_users, get_all_user_ids, failed_downloads, remove_failed_download
@@ -345,6 +346,44 @@ async def queue_command(client: Client, message: Message):
         await message.reply_text(f"❌ Error fetching queue status: {str(e)}")
 
 async def resources_command(client: Client, message: Message):
+@Client.on_message(filters.command(["clearfolders", "cleanfolders", "deletefolders"]))
+async def clear_folders_command(client: Client, message: Message):
+    """
+    Deletes all files inside 'downloads', 'AAB/utils/thumb', and 'encode' folders.
+    Usage: /clearfolders or /cleanfolders or /deletefolders
+    """
+    try:
+        import shutil
+        import glob
+        deleted = []
+        errors = []
+        # List of folders to clear
+        folders = [
+            "downloads",
+            "encode"
+        ]
+        for folder in folders:
+            abs_path = os.path.abspath(folder)
+            if os.path.exists(abs_path):
+                # Remove all files and subfolders inside, but not the folder itself
+                for item in os.listdir(abs_path):
+                    item_path = os.path.join(abs_path, item)
+                    try:
+                        if os.path.isfile(item_path) or os.path.islink(item_path):
+                            os.remove(item_path)
+                        elif os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        deleted.append(item_path)
+                    except Exception as e:
+                        errors.append(f"{item_path}: {str(e)}")
+            else:
+                errors.append(f"{abs_path} does not exist.")
+        reply = f"✅ Deleted {len(deleted)} items from folders."
+        if errors:
+            reply += f"\n❌ Errors:\n" + "\n".join(errors)
+        await message.reply_text(reply)
+    except Exception as e:
+        await message.reply_text(f"❌ Error clearing folders: {str(e)}")
     try:
         import psutil
         import shutil
@@ -420,3 +459,28 @@ async def resources_command(client: Client, message: Message):
     except Exception as e:
         LOG.error(f"Error in resources command: {e}")
         await message.reply_text(f"❌ Error fetching resources: {str(e)}")
+
+@Client.on_message(filters.command(["restart", "reboot"]))
+async def restart_command(client: Client, message: Message):
+    """
+    Restart the bot by stopping all processes and restarting.
+    Usage: /restart or /reboot
+    """
+    try:
+        import sys
+        import subprocess
+        
+        await message.reply_text("🔄 Restarting bot... Please wait.")
+        LOG.info(f"Restart command executed by user {getattr(message.from_user, 'id', 'unknown')}")
+        
+        # Stop the bot gracefully
+        await client.stop()
+        
+        # Restart the bot using python3 -m Jav
+        python = sys.executable
+        os.execl(python, python, "-m", "Jav")
+        
+    except Exception as e:
+        LOG.error(f"Error in restart command: {e}")
+        await message.reply_text(f"❌ Error restarting bot: {str(e)}")
+
